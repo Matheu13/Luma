@@ -1,7 +1,7 @@
 # Luma
 
 A calm, good-looking home screen for Fire TV and Android TV. Your seven favourite apps sit in a
-dock over a full-screen wallpaper, with an "All apps" grid, five themes and quick access to the
+dock over a full-screen wallpaper, with an "All apps" grid, six themes and quick access to the
 TV's settings. No ads, no rows of recommendations.
 
 ![Luma's Lunar theme on a Fire TV: a moon over dunes, "Good afternoon." and a dock of seven apps](docs/screenshots/lunar.jpg)
@@ -11,18 +11,21 @@ TV's settings. No ads, no rows of recommendations.
 | ![Aurora theme: glossy tinted tiles under "Your night starts here."](docs/screenshots/aurora.jpg) | ![Cinema Shelf theme: tall scenic poster cards over a misty lake](docs/screenshots/cinema-shelf.jpg) |
 | **Prism** | **Nebula** |
 | ![Prism theme: frosted glass tiles over glass ribbons](docs/screenshots/prism.jpg) | ![Nebula theme: a large preview of the selected app beside a grid of apps](docs/screenshots/nebula.jpg) |
+| **Daylight** | |
+| ![Daylight theme: a light home with a big preview of the selected favourite above rows of every app](docs/screenshots/daylight.jpg) | |
 
 *Screenshots from a Fire TV. The apps shown are the ones installed on that TV; their names and artwork belong to their owners.*
 
-- **Five themes:** Lunar, Aurora, Cinema Shelf, Prism and Nebula, each with its own wallpaper and
-  card style: frosted glass, glossy tiles or scenic posters.
+- **Six themes:** Lunar, Aurora, Cinema Shelf, Prism and Nebula, each with its own wallpaper and
+  card style (frosted glass, glossy tiles or scenic posters), and Daylight, a light home in the style of a
+  streaming box: a big preview of the focused favourite, all your apps in rows, and a gentle lift on the selected tile.
 - **Cards made from your apps:** each card uses the app's own TV banner or icon, tinted to match.
 - **Built for the remote:** a crisp highlight that moves straight to the tile you press, Hold OK to rearrange, Luma-styled menus.
 - **Settings in one place:** the gear opens Luma Settings (Appearance, TV settings, About).
 - **Screen-reader friendly:** every tile, menu row and top-bar item is labelled.
 - **Small and private:** no internet access, no permissions, no tracking. About 11 MB.
 
-## Coming in Luma 1.2: TV setup
+## Coming in Luma 1.3: TV setup
 
 Planned, not yet released. A new **Settings > TV setup** panel will let Luma tidy up the TV itself, with no
 computer needed:
