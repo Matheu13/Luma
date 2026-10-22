@@ -4,6 +4,16 @@ A calm, good-looking home screen for Fire TV and Android TV. Your seven favourit
 dock over a full-screen wallpaper, with an "All apps" grid, five themes and quick access to the
 TV's settings. No ads, no rows of recommendations.
 
+![Luma's Lunar theme on a Fire TV: a moon over dunes, "Good afternoon." and a dock of seven apps](docs/screenshots/lunar.jpg)
+
+| Aurora | Cinema Shelf |
+|---|---|
+| ![Aurora theme: glossy tinted tiles under "Your night starts here."](docs/screenshots/aurora.jpg) | ![Cinema Shelf theme: tall scenic poster cards over a misty lake](docs/screenshots/cinema-shelf.jpg) |
+| **Prism** | **Nebula** |
+| ![Prism theme: frosted glass tiles over glass ribbons](docs/screenshots/prism.jpg) | ![Nebula theme: a large preview of the selected app beside a grid of apps](docs/screenshots/nebula.jpg) |
+
+*Screenshots from a Fire TV. The apps shown are the ones installed on that TV; their names and artwork belong to their owners.*
+
 - **Five themes:** Lunar, Aurora, Cinema Shelf, Prism and Nebula, each with its own wallpaper and
   card style: frosted glass, glossy tiles or scenic posters.
 - **Cards made from your apps:** each card uses the app's own TV banner or icon, tinted to match.
@@ -11,6 +21,30 @@ TV's settings. No ads, no rows of recommendations.
 - **Settings in one place:** the gear opens Luma Settings (Appearance, TV settings, About).
 - **Screen-reader friendly:** every tile, menu row and top-bar item is labelled.
 - **Small and private:** no internet access, no permissions, no tracking. About 11 MB.
+
+## Coming in Luma 1.2: TV setup
+
+Planned, not yet released. A new **Settings > TV setup** panel will let Luma tidy up the TV itself, with no
+computer needed:
+
+- **Turn off ads & tracking.** Switches off the TV's ad, tracking and promo services from a curated list for each
+  platform. Nothing is uninstalled, and the list is shown before anything changes. Riskier extras (such as blocking
+  forced Fire OS updates) stay off unless you pick them one by one.
+- **Restore original.** One button turns back on everything Luma turned off and gives the home screen and screensaver
+  back to the TV's own.
+- **Make Luma the home screen,** including on Google TV, which today needs a computer.
+- **A Luma screensaver** that drifts slowly through the five wallpapers with the time, instead of promotions.
+- **Home button without extra apps on Fire TV,** if Fire OS needs it, replacing Home on Fire.
+- **Setup check** that shows what is set up and what is still missing. After a system update turns apps back on,
+  Luma offers to switch them off again.
+- **A safety net.** If Luma ever crashes three times in five minutes, the TV's own home screen comes back by itself.
+
+How it will work: you switch on developer access (ADB debugging) once and accept the TV's "Allow USB debugging?"
+prompt. Luma then sends a fixed set of commands to the TV it runs on, and nothing else. Doing this needs Android's
+network permission, even though the connection never leaves the TV. Luma will still never go online. The ADB client
+is adapted, with credit, from the MIT-licensed [Free My TV](https://github.com/simbasjungles/free-my-tv).
+
+The design is in [docs/superpowers/specs/2026-10-22-tv-setup-design.md](docs/superpowers/specs/2026-10-22-tv-setup-design.md).
 
 ## Install
 
@@ -91,6 +125,7 @@ Other tools:
     app/src/…/MainActivity.java   the whole app
     app/res, app/assets       launcher icon, banner, wallpapers
     tools/                    build scripts, regression audit, icon generator
+    docs/                     screenshots and design notes
 
 ## License
 
