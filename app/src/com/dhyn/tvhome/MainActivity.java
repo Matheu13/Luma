@@ -16,8 +16,13 @@ static final int DOCK=7;
 int theme=0;Screen screen;ArrayList<App> apps=new ArrayList<>(),favourites=new ArrayList<>();boolean all=false,moving=false,held=false,fireTv;int selected=0,nav=-1;Panel panel;long hintUntil;
 
 class App {String name,pkg;Drawable icon,banner;int tone;Bitmap shelf;App(String n,String p,Drawable d,Drawable b){name=n;pkg=p;icon=d;banner=b;}
-// Daylight's top-area backdrop: the app's art squeezed to 32x18 then enlarged with filtering, which blurs it cheaply.
-Bitmap shelf(){if(shelf==null){Drawable d=banner!=null?banner:icon;Bitmap s=Bitmap.createBitmap(32,18,Bitmap.Config.ARGB_8888);if(d!=null){d.setBounds(0,0,32,18);d.draw(new Canvas(s));}shelf=Bitmap.createScaledBitmap(s,836,470,true);s.recycle();}return shelf;}
+// Daylight's top-area backdrop, built once per app at half size: the art squeezed to 32x18 then enlarged with filtering
+// (a cheap blur), washed with the app's colour, a light dark scrim so the white title stays readable over pale banners,
+// and faded out at the bottom so it melts into the wallpaper. Baking it keeps each frame to a single bitmap draw.
+Bitmap shelf(){if(shelf==null){Drawable d=banner!=null?banner:icon;Bitmap s=Bitmap.createBitmap(32,18,Bitmap.Config.ARGB_8888);if(d!=null){d.setBounds(0,0,32,18);d.draw(new Canvas(s));}
+shelf=Bitmap.createBitmap(836,235,Bitmap.Config.ARGB_8888);Canvas k=new Canvas(shelf);Paint q=new Paint(Paint.FILTER_BITMAP_FLAG);k.drawBitmap(s,null,new Rect(0,0,836,235),q);s.recycle();
+q.setShader(new LinearGradient(0,0,0,235,(tone()&0xffffff)|0x66000000,0,Shader.TileMode.CLAMP));k.drawRect(0,0,836,235,q);q.setShader(null);q.setColor(0x33000000);k.drawRect(0,0,836,235,q);
+q.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));q.setShader(new LinearGradient(0,175,0,235,0xff000000,0,Shader.TileMode.CLAMP));k.drawRect(0,175,836,235,q);}return shelf;}
 // Average of the icon's saturated pixels; tints the app's card.
 int tone(){if(tone==0){tone=0xff2a3350;try{Bitmap b=Bitmap.createBitmap(24,24,Bitmap.Config.ARGB_8888);icon.setBounds(0,0,24,24);icon.draw(new Canvas(b));long r=0,g=0,bl=0,n=0;float[] hsv=new float[3];for(int y=0;y<24;y++)for(int x=0;x<24;x++){int px=b.getPixel(x,y);if(Color.alpha(px)<200)continue;Color.colorToHSV(px,hsv);if(hsv[1]<0.35f||hsv[2]<0.25f)continue;r+=Color.red(px);g+=Color.green(px);bl+=Color.blue(px);n++;}if(n>8)tone=Color.rgb((int)(r/n),(int)(g/n),(int)(bl/n));b.recycle();}catch(Exception ignored){}}return tone;}}
 
@@ -161,13 +166,10 @@ if(lift==null||lift.length!=n){lift=new float[n];if(selected<n&&nav<0)lift[selec
 for(int i=0;i<n;i++){float target=i==selected&&nav<0?1:0;lift[i]=target>lift[i]?Math.min(target,lift[i]+dt/150f):Math.max(target,lift[i]-dt/150f);if(lift[i]>0&&lift[i]<1)sliding=true;}
 float tilt=Math.max(0,1-(now-tiltAt)/300f);if(tilt>0)sliding=true;
 if(selected<f)shelfIndex=selected;c.save();c.translate(0,-scroll);
-if(f>0){App a=favourites.get(Math.min(shelfIndex,f-1));RectF area=new RectF(0,0,1672,470);int layer=c.saveLayer(area,null);c.drawBitmap(a.shelf(),null,area,p);
-// A light dark scrim keeps the white title readable over pale banners; the area then fades into the wallpaper at the bottom.
-p.setShader(new LinearGradient(0,0,0,470,alpha(a.tone(),0x66),0x00000000,Shader.TileMode.CLAMP));c.drawRect(area,p);p.setShader(null);p.setColor(0x33000000);c.drawRect(area,p);
-p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));p.setShader(new LinearGradient(0,350,0,470,0xff000000,0x00000000,Shader.TileMode.CLAMP));c.drawRect(0,350,1672,470,p);p.setShader(null);p.setXfermode(null);c.restoreToCount(layer);
+if(f>0&&scroll<470){App a=favourites.get(Math.min(shelfIndex,f-1));p.setShader(null);c.drawBitmap(a.shelf(),null,new RectF(0,0,1672,470),p);
 Drawable art=a.banner!=null?a.banner:a.icon;if(art!=null)drawArt(c,art,new RectF(80,150,560,420));text(c,label(a.name,900,64),620,300,64,Color.WHITE);text(c,"Open app  ›",620,370,30,Color.WHITE);}
-// The selected tile is drawn last so its lifted, larger card sits over its neighbours.
-for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){if((i==selected)!=(pass==1))continue;RectF r=daylightRect(i);float e=1-(float)Math.pow(1-lift[i],3);daylightCard(c,v.get(i),r,e,i==selected?tilt:0);RectF on=new RectF(r);on.offset(0,-scroll);hit[i]=on;}
+// The selected tile is drawn last so its lifted, larger card sits over its neighbours. Rows scrolled off screen are skipped.
+for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){if((i==selected)!=(pass==1))continue;RectF r=daylightRect(i);RectF on=new RectF(r);on.offset(0,-scroll);hit[i]=on;if(on.bottom<-40||on.top>981)continue;float e=1-(float)Math.pow(1-lift[i],3);daylightCard(c,v.get(i),r,e,i==selected?tilt:0);}
 if(nav<0&&selected<n){RectF r=daylightRect(selected);p.setTextAlign(Paint.Align.CENTER);text(c,label(v.get(selected).name,260,22),r.centerX(),r.bottom+34,22,0xff1c1f26);p.setTextAlign(Paint.Align.LEFT);}
 c.restore();return sliding;}
 // Daylight's tiles: seven to a row, 200x120, laid out in content space (before scrolling).
