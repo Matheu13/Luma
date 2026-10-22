@@ -85,6 +85,7 @@ public boolean onKeyDown(int k,KeyEvent e){if(panel!=null)return panelKey(k,e);i
 if((k==23||k==66)&&nav<0){if(moving){moving=false;hintUntil=0;saveOrder();held=true;screen.invalidate();return true;}if(e.getRepeatCount()>0&&!held){held=true;appOptions();}return true;}
 if(moving){int old=selected,step=all?7:theme==4?4:7;if(k==21)selected=Math.max(0,selected-1);else if(k==22)selected=Math.min(n-1,selected+1);else if(k==19)selected=Math.max(0,selected-step);else if(k==20)selected=Math.min(n-1,selected+step);else if(k==4){moving=false;hintUntil=0;saveOrder();}if(!swapVisible(old,selected))selected=old;screen.invalidate();return true;}
 int cols=all?7:(theme==4?4:7);
+if(daylight()&&k>=19&&k<=22){screen.tiltX=k==21?-1:k==22?1:0;screen.tiltY=k==19?-1:k==20?1:0;screen.tiltAt=System.currentTimeMillis();}
 if(nav>=0){if(k==21)nav=(nav+2)%3;else if(k==22)nav=(nav+1)%3;else if(k==20||k==4)nav=-1;else if(k==23||k==66){held=true;if(nav==2)settingsPanel(null);else{all=nav==1;selected=0;nav=-1;}}screen.invalidate();return true;}
 if(k==19&&selected<cols){nav=all?1:0;screen.invalidate();return true;}
 // Back at the top level does nothing: a launcher has nowhere to go back to, and finishing would flash Amazon's home.
@@ -112,7 +113,7 @@ void slice(Canvas c,Bitmap b,RectF src,RectF r){if(b==null)return;float sx=b.get
 
 protected void onDraw(Canvas real){super.onDraw(real);long now=System.currentTimeMillis();boolean animating=false;scale=Math.min(getWidth()/1672f,getHeight()/941f);real.save();real.translate((getWidth()-1672*scale)/2,(getHeight()-941*scale)/2);real.scale(scale,scale);Canvas c=real;
 c.drawColor(Color.rgb(5,8,15));if(bg!=null)c.drawBitmap(bg,null,new RectF(0,0,1672,941),p);if(all){p.setColor(0xcc060914);c.drawRect(0,0,1672,941,p);}
-int accent=ACCENT[theme];boolean dl=daylight();if(dl)animating|=daylightHome(c,now);else scroll=scrollTarget=0;
+int accent=ACCENT[theme];boolean dl=daylight();if(dl)animating|=daylightHome(c,now);else{scroll=scrollTarget=0;lift=null;tiltX=tiltY=0;}
 // Top bar: Home, Apps, Settings gear, time and date. Over Daylight's light rows (once scrolled) it turns dark.
 boolean darkBar=dl&&scroll>=100;int ink=darkBar?0xff1c1f26:Color.WHITE;
 text(c,"Home",65,70,25,all?0xffaaaaaa:ink);text(c,"Apps",185,70,25,all?Color.WHITE:darkBar?0xff6a707c:0xffaaaaaa);gear(c,1440,58,17,ink);
@@ -152,25 +153,35 @@ if(art!=null){RectF box=a.banner!=null?new RectF(r.left+16,cy-s*0.62f,r.right-16
 if(all||theme!=1){float size=all?19:theme==2?30:theme==4?24:theme==3?22:20;p.setTypeface(Typeface.create("sans-serif-light",0));p.setTextSize(size);while(size>16&&p.measureText(a.name)>r.width()-24)p.setTextSize(--size);p.setTextAlign(Paint.Align.CENTER);text(c,label(a.name,r.width()-24,size),r.centerX(),r.bottom-(all?16:theme==2?44:theme==0?16:20),size,theme==0&&!all?0xffd8dbe0:Color.WHITE);p.setTextAlign(Paint.Align.LEFT);}}
 
 // Daylight home: a big top area for the focused favourite, then every app in rows, all scrolled as one page. Returns true while still moving.
-float scroll,scrollTarget;long lastFrame;int shelfIndex;
+float scroll,scrollTarget;long lastFrame,tiltAt;int shelfIndex,tiltX,tiltY;float[] lift;Camera camera=new Camera();Matrix tiltMatrix=new Matrix();
 boolean daylightHome(Canvas c,long now){ArrayList<App> v=visible();int n=v.size(),f=favourites.size(),row=selected/7;hit=new RectF[n];
 float dt=Math.max(0,Math.min(50,now-lastFrame));lastFrame=now;scrollTarget=row==0?0:300+160*row;scroll+=(scrollTarget-scroll)*(float)(1-Math.exp(-dt/66.0));boolean sliding=Math.abs(scrollTarget-scroll)>0.5f;if(!sliding)scroll=scrollTarget;
+// Focus lift per tile, 0..1, eased over 150 ms; the list can change size when apps are installed or removed.
+if(lift==null||lift.length!=n){lift=new float[n];if(selected<n&&nav<0)lift[selected]=1;}
+for(int i=0;i<n;i++){float target=i==selected&&nav<0?1:0;lift[i]=target>lift[i]?Math.min(target,lift[i]+dt/150f):Math.max(target,lift[i]-dt/150f);if(lift[i]>0&&lift[i]<1)sliding=true;}
+float tilt=Math.max(0,1-(now-tiltAt)/300f);if(tilt>0)sliding=true;
 if(selected<f)shelfIndex=selected;c.save();c.translate(0,-scroll);
 if(f>0){App a=favourites.get(Math.min(shelfIndex,f-1));RectF area=new RectF(0,0,1672,470);int layer=c.saveLayer(area,null);c.drawBitmap(a.shelf(),null,area,p);
 // A light dark scrim keeps the white title readable over pale banners; the area then fades into the wallpaper at the bottom.
 p.setShader(new LinearGradient(0,0,0,470,alpha(a.tone(),0x66),0x00000000,Shader.TileMode.CLAMP));c.drawRect(area,p);p.setShader(null);p.setColor(0x33000000);c.drawRect(area,p);
 p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));p.setShader(new LinearGradient(0,350,0,470,0xff000000,0x00000000,Shader.TileMode.CLAMP));c.drawRect(0,350,1672,470,p);p.setShader(null);p.setXfermode(null);c.restoreToCount(layer);
 Drawable art=a.banner!=null?a.banner:a.icon;if(art!=null)drawArt(c,art,new RectF(80,150,560,420));text(c,label(a.name,900,64),620,300,64,Color.WHITE);text(c,"Open app  ›",620,370,30,Color.WHITE);}
-for(int i=0;i<n;i++){RectF r=daylightRect(i);daylightCard(c,v.get(i),r,i==selected&&nav<0);RectF on=new RectF(r);on.offset(0,-scroll);hit[i]=on;}
+// The selected tile is drawn last so its lifted, larger card sits over its neighbours.
+for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){if((i==selected)!=(pass==1))continue;RectF r=daylightRect(i);float e=1-(float)Math.pow(1-lift[i],3);daylightCard(c,v.get(i),r,e,i==selected?tilt:0);RectF on=new RectF(r);on.offset(0,-scroll);hit[i]=on;}
 if(nav<0&&selected<n){RectF r=daylightRect(selected);p.setTextAlign(Paint.Align.CENTER);text(c,label(v.get(selected).name,260,22),r.centerX(),r.bottom+34,22,0xff1c1f26);p.setTextAlign(Paint.Align.LEFT);}
 c.restore();return sliding;}
 // Daylight's tiles: seven to a row, 200x120, laid out in content space (before scrolling).
 RectF daylightRect(int i){int r=i/7,col=i%7;float l=52+col*(200+28),t=500+r*(120+40);return new RectF(l,t,l+200,t+120);}
 // A rounded tile tinted with the app's colour, showing its TV banner, or its icon when it has none.
-void daylightCard(Canvas c,App a,RectF r,boolean focused){int t=a.tone();c.save();Path clip=new Path();clip.addRoundRect(r,18,18,Path.Direction.CW);c.clipPath(clip);
+// e (0..1, eased) lifts it: larger, a soft shadow, a slight tilt towards the last arrow (tilt fades 1..0) and a shine.
+void daylightCard(Canvas c,App a,RectF r,float e,float tilt){int t=a.tone();float cx=r.centerX(),cy=r.centerY();c.save();
+if(e>0){float z=1+0.12f*e;c.scale(z,z,cx,cy);for(int g=1;g<=4;g++){RectF sh=new RectF(r);sh.inset(-6*g,-6*g);sh.offset(0,10*e);round(c,sh,alpha(0xff000000,(int)(0x10*e)),18+6*g);}
+if(tilt>0){camera.save();camera.rotateY(4*tiltX*e*tilt);camera.rotateX(-4*tiltY*e*tilt);camera.getMatrix(tiltMatrix);camera.restore();tiltMatrix.preTranslate(-cx,-cy);tiltMatrix.postTranslate(cx,cy);c.concat(tiltMatrix);}}
+c.save();Path clip=new Path();clip.addRoundRect(r,18,18,Path.Direction.CW);c.clipPath(clip);
 p.setShader(new LinearGradient(0,r.top,0,r.bottom,shade(t,1.15f),shade(t,0.8f),Shader.TileMode.CLAMP));c.drawRect(r,p);p.setShader(null);
-if(a.banner!=null){RectF in=new RectF(r);in.inset(10,10);drawArt(c,a.banner,in);}else if(a.icon!=null)drawArt(c,a.icon,new RectF(r.centerX()-32,r.centerY()-32,r.centerX()+32,r.centerY()+32));
-c.restore();outline(c,r,0x40ffffff,1.5f,18);if(focused)outline(c,r,Color.WHITE,4,18);}
+if(a.banner!=null){RectF in=new RectF(r);in.inset(10,10);drawArt(c,a.banner,in);}else if(a.icon!=null)drawArt(c,a.icon,new RectF(cx-32,cy-32,cx+32,cy+32));
+if(e>0){p.setShader(new LinearGradient(r.left,r.top,cx,cy,alpha(0xffffffff,(int)(0x40*e)),0x00ffffff,Shader.TileMode.CLAMP));c.drawRect(r,p);p.setShader(null);}
+c.restore();outline(c,r,0x40ffffff,1.5f,18);c.restore();}
 
 // Daylight's panels are light frosted glass with dark text; every other theme's are dark.
 void drawPanel(Canvas c,int accent){Panel q=panel;int rows=Math.min(q.items.length,8);float w=660,rowH=58,h=116+rows*rowH;float x=(1672-w)/2,y=(941-h)/2;boolean light=theme==DAYLIGHT;int ink=light?0xff1c1f26:Color.WHITE,dim=light?0xff4a4f5a:0xffc0c5cf;
