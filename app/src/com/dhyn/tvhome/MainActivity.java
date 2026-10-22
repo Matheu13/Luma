@@ -15,7 +15,9 @@ static final int DOCK=7;
 
 int theme=0;Screen screen;ArrayList<App> apps=new ArrayList<>(),favourites=new ArrayList<>();boolean all=false,moving=false,held=false,fireTv;int selected=0,nav=-1;Panel panel;long hintUntil;
 
-class App {String name,pkg;Drawable icon,banner;int tone;App(String n,String p,Drawable d,Drawable b){name=n;pkg=p;icon=d;banner=b;}
+class App {String name,pkg;Drawable icon,banner;int tone;Bitmap shelf;App(String n,String p,Drawable d,Drawable b){name=n;pkg=p;icon=d;banner=b;}
+// Daylight's top-area backdrop: the app's art squeezed to 32x18 then enlarged with filtering, which blurs it cheaply.
+Bitmap shelf(){if(shelf==null){Drawable d=banner!=null?banner:icon;Bitmap s=Bitmap.createBitmap(32,18,Bitmap.Config.ARGB_8888);if(d!=null){d.setBounds(0,0,32,18);d.draw(new Canvas(s));}shelf=Bitmap.createScaledBitmap(s,836,470,true);s.recycle();}return shelf;}
 // Average of the icon's saturated pixels; tints the app's card.
 int tone(){if(tone==0){tone=0xff2a3350;try{Bitmap b=Bitmap.createBitmap(24,24,Bitmap.Config.ARGB_8888);icon.setBounds(0,0,24,24);icon.draw(new Canvas(b));long r=0,g=0,bl=0,n=0;float[] hsv=new float[3];for(int y=0;y<24;y++)for(int x=0;x<24;x++){int px=b.getPixel(x,y);if(Color.alpha(px)<200)continue;Color.colorToHSV(px,hsv);if(hsv[1]<0.35f||hsv[2]<0.25f)continue;r+=Color.red(px);g+=Color.green(px);bl+=Color.blue(px);n++;}if(n>8)tone=Color.rgb((int)(r/n),(int)(g/n),(int)(bl/n));b.recycle();}catch(Exception ignored){}}return tone;}}
 
@@ -30,7 +32,7 @@ App makeApp(String pkg){PackageManager pm=getPackageManager();Intent in=appInten
 void refreshApps(){String focus=visible().size()>selected?visible().get(selected).pkg:null;ArrayList<App> found=new ArrayList<>();Set<String> seen=new HashSet<>();seen.add(getPackageName());PackageManager pm=getPackageManager();
 for(String pkg:DEFAULTS){App a=seen.add(pkg)?makeApp(pkg):null;if(a!=null)found.add(a);}
 for(String category:new String[]{Intent.CATEGORY_LEANBACK_LAUNCHER,Intent.CATEGORY_LAUNCHER})for(ResolveInfo r:pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(category),0)){String pkg=r.activityInfo.packageName;if(!seen.add(pkg))continue;App a=makeApp(pkg);if(a!=null)found.add(a);}
-apps=found;restoreOrder();selected=0;for(int j=0;focus!=null&&j<visible().size();j++)if(visible().get(j).pkg.equals(focus))selected=j;if(screen!=null)screen.invalidate();}
+for(App a:apps)if(a.shelf!=null)a.shelf.recycle();apps=found;restoreOrder();selected=0;for(int j=0;focus!=null&&j<visible().size();j++)if(visible().get(j).pkg.equals(focus))selected=j;if(screen!=null)screen.invalidate();}
 
 // One settings file for every launch entry. Activity.getPreferences was keyed by the entry Luma was opened through, which kept two diverging copies.
 SharedPreferences prefs(){return getSharedPreferences("luma",0);}
@@ -42,7 +44,8 @@ public void onCreate(Bundle b){super.onCreate(b);getWindow().setFlags(1024,1024)
 if(!fireTv)try{getPackageManager().setComponentEnabledSetting(new ComponentName(this,"com.dhyn.tvhome.LumaHome"),PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);}catch(Exception ignored){}
 theme=Math.max(0,Math.min(5,prefs().getInt("theme",0)));refreshApps();screen=new Screen();setContentView(screen);IntentFilter f=new IntentFilter();f.addAction(Intent.ACTION_PACKAGE_ADDED);f.addAction(Intent.ACTION_PACKAGE_REMOVED);f.addAction(Intent.ACTION_PACKAGE_CHANGED);f.addDataScheme("package");registerReceiver(packageObserver,f);}
 // Home pressed again while Luma is open: back to the dock.
-@Override protected void onNewIntent(Intent i){super.onNewIntent(i);if(moving){moving=false;saveOrder();}panel=null;nav=-1;all=false;hintUntil=System.currentTimeMillis()+6000;screen.invalidate();}
+@Override protected void onNewIntent(Intent i){super.onNewIntent(i);if(moving){moving=false;saveOrder();}panel=null;nav=-1;all=false;hintUntil=System.currentTimeMillis()+6000;
+if(theme==DAYLIGHT){selected=Math.min(selected%7,Math.max(0,favourites.size()-1));screen.scroll=screen.scrollTarget=0;}screen.invalidate();}
 @Override protected void onResume(){super.onResume();refreshApps();active=true;hintUntil=System.currentTimeMillis()+6000;clockHandler.removeCallbacks(tick);clockHandler.post(tick);}
 @Override protected void onPause(){active=false;clockHandler.removeCallbacks(tick);super.onPause();}
 @Override protected void onDestroy(){clockHandler.removeCallbacks(tick);unregisterReceiver(packageObserver);super.onDestroy();}
@@ -109,15 +112,15 @@ void slice(Canvas c,Bitmap b,RectF src,RectF r){if(b==null)return;float sx=b.get
 
 protected void onDraw(Canvas real){super.onDraw(real);long now=System.currentTimeMillis();boolean animating=false;scale=Math.min(getWidth()/1672f,getHeight()/941f);real.save();real.translate((getWidth()-1672*scale)/2,(getHeight()-941*scale)/2);real.scale(scale,scale);Canvas c=real;
 c.drawColor(Color.rgb(5,8,15));if(bg!=null)c.drawBitmap(bg,null,new RectF(0,0,1672,941),p);if(all){p.setColor(0xcc060914);c.drawRect(0,0,1672,941,p);}
-int accent=ACCENT[theme];
-// Top bar: Home, Apps, Settings gear, time and date.
-text(c,"Home",65,70,25,all?0xffaaaaaa:Color.WHITE);text(c,"Apps",185,70,25,all?Color.WHITE:0xffaaaaaa);gear(c,1440,58,17);
-text(c,new java.text.SimpleDateFormat("HH:mm",Locale.getDefault()).format(new Date()),1510,66,30,Color.WHITE);text(c,new java.text.SimpleDateFormat("EEE d MMM",Locale.getDefault()).format(new Date()),1512,92,17,0xffc0c5cf);
+int accent=ACCENT[theme];boolean dl=daylight();if(dl)animating|=daylightHome(c,now);else scroll=scrollTarget=0;
+// Top bar: Home, Apps, Settings gear, time and date. Over Daylight's light rows (once scrolled) it turns dark.
+boolean darkBar=dl&&scroll>=100;int ink=darkBar?0xff1c1f26:Color.WHITE;
+text(c,"Home",65,70,25,all?0xffaaaaaa:ink);text(c,"Apps",185,70,25,all?Color.WHITE:darkBar?0xff6a707c:0xffaaaaaa);gear(c,1440,58,17,ink);
+text(c,new java.text.SimpleDateFormat("HH:mm",Locale.getDefault()).format(new Date()),1510,66,30,ink);text(c,new java.text.SimpleDateFormat("EEE d MMM",Locale.getDefault()).format(new Date()),1512,92,17,darkBar?0xff4a4f5a:0xffc0c5cf);
 
 if(!all&&theme!=4&&theme!=DAYLIGHT){int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);greetings[0]=hour<12?"Good morning.":hour<18?"Good afternoon.":"Good evening.";float y=theme==0?330:theme==2?295:280;if(theme==1){p.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));p.setTextSize(76);p.setColor(Color.WHITE);c.drawText("Your night",60,235,p);p.setShader(new LinearGradient(60,0,570,0,new int[]{0xff9affee,0xff8872ff},null,Shader.TileMode.CLAMP));c.drawText("starts here.",60,320,p);p.setShader(null);}else text(c,greetings[theme],60,y,theme==2?68:70,Color.WHITE);}if(all)text(c,"Your apps",60,150,52,Color.WHITE);
 
-int n=visible().size();hit=new RectF[n];
-if(daylight()){ArrayList<App> v=visible();for(int i=0;i<n;i++){RectF r=daylightRect(i);hit[i]=r;daylightCard(c,v.get(i),r,i==selected&&nav<0);}n=0;}
+int n=visible().size();if(dl)n=0;else hit=new RectF[n];
 int cols=all?7:(theme==4?4:7);float tileW=all?195:theme==4?225:theme==2?207:201;float tileH=all?145:theme==4?210:theme==2?420:theme==0?162:theme==1?195:210;float left=all?60:theme==4?620:60;float top=all?200:theme==4?305:theme==2?365:theme==0?660:390;float gap=all?25:theme==4?18:20;
 // All apps shows four rows, keeping the selected row third from the top.
 int rowOffset=all?Math.max(0,selected/7-2):0;
@@ -135,7 +138,7 @@ float ha=moving?1:Math.max(0,Math.min(1,(hintUntil-now)/600f));if(ha>0){text(c,m
 
 if(panel!=null)drawPanel(c,accent);real.restore();announce();if(animating)postInvalidateOnAnimation();}
 
-void gear(Canvas c,float cx,float cy,float r){p.setShader(null);p.setColor(Color.WHITE);p.setStyle(Paint.Style.FILL);for(int t=0;t<8;t++){double a=t*Math.PI/4;c.save();c.rotate((float)Math.toDegrees(a),cx,cy);c.drawRoundRect(new RectF(cx-3.5f,cy-r-5,cx+3.5f,cy-r+4),2,2,p);c.restore();}p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(5);c.drawCircle(cx,cy,r-2,p);p.setStrokeWidth(3);c.drawCircle(cx,cy,5,p);p.setStyle(Paint.Style.FILL);}
+void gear(Canvas c,float cx,float cy,float r,int color){p.setShader(null);p.setColor(color);p.setStyle(Paint.Style.FILL);for(int t=0;t<8;t++){double a=t*Math.PI/4;c.save();c.rotate((float)Math.toDegrees(a),cx,cy);c.drawRoundRect(new RectF(cx-3.5f,cy-r-5,cx+3.5f,cy-r+4),2,2,p);c.restore();}p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(5);c.drawCircle(cx,cy,r-2,p);p.setStrokeWidth(3);c.drawCircle(cx,cy,5,p);p.setStyle(Paint.Style.FILL);}
 
 
 // App card, built only from the installed app's own banner or icon: glossy tile (Aurora), scenic poster (Cinema Shelf) or frosted glass.
@@ -148,6 +151,19 @@ float s=all?62:theme==0?74:theme==1?110:theme==2?110:88,cy=all?r.top+56:r.top+r.
 if(art!=null){RectF box=a.banner!=null?new RectF(r.left+16,cy-s*0.62f,r.right-16,cy+s*0.62f):new RectF(r.centerX()-s*0.7f,cy-s/2,r.centerX()+s*0.7f,cy+s/2);drawArt(c,art,box);}
 if(all||theme!=1){float size=all?19:theme==2?30:theme==4?24:theme==3?22:20;p.setTypeface(Typeface.create("sans-serif-light",0));p.setTextSize(size);while(size>16&&p.measureText(a.name)>r.width()-24)p.setTextSize(--size);p.setTextAlign(Paint.Align.CENTER);text(c,label(a.name,r.width()-24,size),r.centerX(),r.bottom-(all?16:theme==2?44:theme==0?16:20),size,theme==0&&!all?0xffd8dbe0:Color.WHITE);p.setTextAlign(Paint.Align.LEFT);}}
 
+// Daylight home: a big top area for the focused favourite, then every app in rows, all scrolled as one page. Returns true while still moving.
+float scroll,scrollTarget;long lastFrame;int shelfIndex;
+boolean daylightHome(Canvas c,long now){ArrayList<App> v=visible();int n=v.size(),f=favourites.size(),row=selected/7;hit=new RectF[n];
+float dt=Math.max(0,Math.min(50,now-lastFrame));lastFrame=now;scrollTarget=row==0?0:300+160*row;scroll+=(scrollTarget-scroll)*(float)(1-Math.exp(-dt/66.0));boolean sliding=Math.abs(scrollTarget-scroll)>0.5f;if(!sliding)scroll=scrollTarget;
+if(selected<f)shelfIndex=selected;c.save();c.translate(0,-scroll);
+if(f>0){App a=favourites.get(Math.min(shelfIndex,f-1));RectF area=new RectF(0,0,1672,470);int layer=c.saveLayer(area,null);c.drawBitmap(a.shelf(),null,area,p);
+// A light dark scrim keeps the white title readable over pale banners; the area then fades into the wallpaper at the bottom.
+p.setShader(new LinearGradient(0,0,0,470,alpha(a.tone(),0x66),0x00000000,Shader.TileMode.CLAMP));c.drawRect(area,p);p.setShader(null);p.setColor(0x33000000);c.drawRect(area,p);
+p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));p.setShader(new LinearGradient(0,350,0,470,0xff000000,0x00000000,Shader.TileMode.CLAMP));c.drawRect(0,350,1672,470,p);p.setShader(null);p.setXfermode(null);c.restoreToCount(layer);
+Drawable art=a.banner!=null?a.banner:a.icon;if(art!=null)drawArt(c,art,new RectF(80,150,560,420));text(c,label(a.name,900,64),620,300,64,Color.WHITE);text(c,"Open app  ›",620,370,30,Color.WHITE);}
+for(int i=0;i<n;i++){RectF r=daylightRect(i);daylightCard(c,v.get(i),r,i==selected&&nav<0);RectF on=new RectF(r);on.offset(0,-scroll);hit[i]=on;}
+if(nav<0&&selected<n){RectF r=daylightRect(selected);p.setTextAlign(Paint.Align.CENTER);text(c,label(v.get(selected).name,260,22),r.centerX(),r.bottom+34,22,0xff1c1f26);p.setTextAlign(Paint.Align.LEFT);}
+c.restore();return sliding;}
 // Daylight's tiles: seven to a row, 200x120, laid out in content space (before scrolling).
 RectF daylightRect(int i){int r=i/7,col=i%7;float l=52+col*(200+28),t=500+r*(120+40);return new RectF(l,t,l+200,t+120);}
 // A rounded tile tinted with the app's colour, showing its TV banner, or its icon when it has none.

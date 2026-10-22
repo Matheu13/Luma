@@ -81,8 +81,18 @@ def choose_theme(name):
         key(20, 0.6)
     key(4); key(4); return False
 
+def top_diff(a, b):
+    # Mean per-pixel difference of the top half of two screenshots (0 = identical, 255 = opposite).
+    from PIL import Image, ImageChops
+    im = [Image.open(OUT / f'{n}.png').convert('L').crop((0, 0, 1920, 540)) for n in (a, b)]
+    return sum(ImageChops.difference(*im).getdata()) / (1920 * 540)
+
 def daylight_checks():
     # Daylight shows every app: the dock in row 1, the rest below. Starts and ends on row 1 of a fresh Luma.
+    shot('theme-Daylight'); key(22); shot('daylight-next')
+    d = top_diff('theme-Daylight', 'daylight-next'); record('Daylight top area follows focus', d > 8, f'top-half difference {d:.1f}')
+    key(21); key(20); shot('daylight-scrolled'); d = top_diff('theme-Daylight', 'daylight-scrolled')
+    record('Daylight scrolls down', d > 8, f'top-half difference {d:.1f}'); key(19)
     key(20); record('Daylight down reaches lower rows', ', app ' in selected(), selected())
     key(19); record('Daylight up returns to the dock row', ', dock ' in selected(), selected())
     key(20); key(23, 1.2, long=True); items = texts()
