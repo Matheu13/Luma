@@ -16,13 +16,14 @@ static final int DOCK=7;
 int theme=0;Screen screen;ArrayList<App> apps=new ArrayList<>(),favourites=new ArrayList<>();boolean all=false,moving=false,held=false,fireTv;int selected=0,nav=-1;Panel panel;long hintUntil;
 
 class App {String name,pkg;Drawable icon,banner;int tone;Bitmap shelf;App(String n,String p,Drawable d,Drawable b){name=n;pkg=p;icon=d;banner=b;}
-// Daylight's top-area backdrop, built once per app at half size: the art squeezed to 32x18 then enlarged with filtering
-// (a cheap blur), washed with the app's colour, a light dark scrim so the white title stays readable over pale banners,
-// and faded out at the bottom so it melts into the wallpaper. Baking it keeps each frame to a single bitmap draw.
-Bitmap shelf(){if(shelf==null){Drawable d=banner!=null?banner:icon;Bitmap s=Bitmap.createBitmap(32,18,Bitmap.Config.ARGB_8888);if(d!=null){d.setBounds(0,0,32,18);d.draw(new Canvas(s));}
+// Daylight's top-area backdrop, built once per app at half size: a deep wash of the app's colour over its art squeezed
+// to 12x7 and enlarged with filtering (so only its colours survive, no shapes), dark enough for the white title, and
+// faded out below the title so it melts into the wallpaper. Baking it keeps each frame to a single bitmap draw.
+Bitmap shelf(){if(shelf==null){Drawable d=banner!=null?banner:icon;Bitmap s=Bitmap.createBitmap(12,7,Bitmap.Config.ARGB_8888);if(d!=null){d.setBounds(0,0,12,7);d.draw(new Canvas(s));}
 shelf=Bitmap.createBitmap(836,235,Bitmap.Config.ARGB_8888);Canvas k=new Canvas(shelf);Paint q=new Paint(Paint.FILTER_BITMAP_FLAG);k.drawBitmap(s,null,new Rect(0,0,836,235),q);s.recycle();
-q.setShader(new LinearGradient(0,0,0,235,(tone()&0xffffff)|0x66000000,0,Shader.TileMode.CLAMP));k.drawRect(0,0,836,235,q);q.setShader(null);q.setColor(0x33000000);k.drawRect(0,0,836,235,q);
-q.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));q.setShader(new LinearGradient(0,175,0,235,0xff000000,0,Shader.TileMode.CLAMP));k.drawRect(0,175,836,235,q);}return shelf;}
+int t=tone();q.setShader(new LinearGradient(0,0,836,0,dark(t,0.36f,0xf0),dark(t,0.52f,0xd8),Shader.TileMode.CLAMP));k.drawRect(0,0,836,235,q);
+q.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));q.setShader(new LinearGradient(0,190,0,235,0xff000000,0,Shader.TileMode.CLAMP));k.drawRect(0,190,836,235,q);}return shelf;}
+int dark(int c,float f,int a){return Color.argb(a,(int)(Color.red(c)*f),(int)(Color.green(c)*f),(int)(Color.blue(c)*f));}
 // Average of the icon's saturated pixels; tints the app's card.
 int tone(){if(tone==0){tone=0xff2a3350;try{Bitmap b=Bitmap.createBitmap(24,24,Bitmap.Config.ARGB_8888);icon.setBounds(0,0,24,24);icon.draw(new Canvas(b));long r=0,g=0,bl=0,n=0;float[] hsv=new float[3];for(int y=0;y<24;y++)for(int x=0;x<24;x++){int px=b.getPixel(x,y);if(Color.alpha(px)<200)continue;Color.colorToHSV(px,hsv);if(hsv[1]<0.35f||hsv[2]<0.25f)continue;r+=Color.red(px);g+=Color.green(px);bl+=Color.blue(px);n++;}if(n>8)tone=Color.rgb((int)(r/n),(int)(g/n),(int)(bl/n));b.recycle();}catch(Exception ignored){}}return tone;}}
 
@@ -159,6 +160,8 @@ if(all||theme!=1){float size=all?19:theme==2?30:theme==4?24:theme==3?22:20;p.set
 
 // Daylight home: a big top area for the focused favourite, then every app in rows, all scrolled as one page. Returns true while still moving.
 float scroll,scrollTarget;long lastFrame,tiltAt;int shelfIndex,tiltX,tiltY;float[] lift;Camera camera=new Camera();Matrix tiltMatrix=new Matrix();
+// The lifted tile's soft shadow; blurred shadows draw with hardware acceleration from Android 9, older TVs simply go without.
+Paint shadow=new Paint(Paint.ANTI_ALIAS_FLAG);{shadow.setMaskFilter(new BlurMaskFilter(22,BlurMaskFilter.Blur.NORMAL));}
 boolean daylightHome(Canvas c,long now){ArrayList<App> v=visible();int n=v.size(),f=favourites.size(),row=selected/7;hit=new RectF[n];
 float dt=Math.max(0,Math.min(50,now-lastFrame));lastFrame=now;scrollTarget=row==0?0:300+160*row;scroll+=(scrollTarget-scroll)*(float)(1-Math.exp(-dt/66.0));boolean sliding=Math.abs(scrollTarget-scroll)>0.5f;if(!sliding)scroll=scrollTarget;
 // Focus lift per tile, 0..1, eased over 150 ms; the list can change size when apps are installed or removed.
@@ -167,7 +170,7 @@ for(int i=0;i<n;i++){float target=i==selected&&nav<0?1:0;lift[i]=target>lift[i]?
 float tilt=Math.max(0,1-(now-tiltAt)/300f);if(tilt>0)sliding=true;
 if(selected<f)shelfIndex=selected;c.save();c.translate(0,-scroll);
 if(f>0&&scroll<470){App a=favourites.get(Math.min(shelfIndex,f-1));p.setShader(null);c.drawBitmap(a.shelf(),null,new RectF(0,0,1672,470),p);
-Drawable art=a.banner!=null?a.banner:a.icon;if(art!=null)drawArt(c,art,new RectF(80,150,560,420));text(c,label(a.name,900,64),620,300,64,Color.WHITE);text(c,"Open app  ›",620,370,30,Color.WHITE);}
+Drawable art=a.banner!=null?a.banner:a.icon;if(art!=null){RectF box=new RectF(80,170,500,406);c.save();Path clip=new Path();clip.addRoundRect(box,16,16,Path.Direction.CW);c.clipPath(clip);drawArt(c,art,box);c.restore();}text(c,label(a.name,900,64),620,300,64,Color.WHITE);text(c,"Open app  ›",620,370,30,Color.WHITE);}
 // The selected tile is drawn last so its lifted, larger card sits over its neighbours. Rows scrolled off screen are skipped.
 for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){if((i==selected)!=(pass==1))continue;RectF r=daylightRect(i);RectF on=new RectF(r);on.offset(0,-scroll);hit[i]=on;if(on.bottom<-40||on.top>981)continue;float e=1-(float)Math.pow(1-lift[i],3);daylightCard(c,v.get(i),r,e,i==selected?tilt:0);}
 if(nav<0&&selected<n){RectF r=daylightRect(selected);p.setTextAlign(Paint.Align.CENTER);text(c,label(v.get(selected).name,260,22),r.centerX(),r.bottom+34,22,0xff1c1f26);p.setTextAlign(Paint.Align.LEFT);}
@@ -177,7 +180,7 @@ RectF daylightRect(int i){int r=i/7,col=i%7;float l=52+col*(200+28),t=500+r*(120
 // A rounded tile tinted with the app's colour, showing its TV banner, or its icon when it has none.
 // e (0..1, eased) lifts it: larger, a soft shadow, a slight tilt towards the last arrow (tilt fades 1..0) and a shine.
 void daylightCard(Canvas c,App a,RectF r,float e,float tilt){int t=a.tone();float cx=r.centerX(),cy=r.centerY();c.save();
-if(e>0){float z=1+0.12f*e;c.scale(z,z,cx,cy);for(int g=1;g<=4;g++){RectF sh=new RectF(r);sh.inset(-6*g,-6*g);sh.offset(0,10*e);round(c,sh,alpha(0xff000000,(int)(0x10*e)),18+6*g);}
+if(e>0){float z=1+0.12f*e;c.scale(z,z,cx,cy);if(Build.VERSION.SDK_INT>=28){RectF sh=new RectF(r);sh.offset(0,12*e);shadow.setColor(alpha(0xff000000,(int)(0x70*e)));c.drawRoundRect(sh,18,18,shadow);}
 if(tilt>0){camera.save();camera.rotateY(4*tiltX*e*tilt);camera.rotateX(-4*tiltY*e*tilt);camera.getMatrix(tiltMatrix);camera.restore();tiltMatrix.preTranslate(-cx,-cy);tiltMatrix.postTranslate(cx,cy);c.concat(tiltMatrix);}}
 c.save();Path clip=new Path();clip.addRoundRect(r,18,18,Path.Direction.CW);c.clipPath(clip);
 p.setShader(new LinearGradient(0,r.top,0,r.bottom,shade(t,1.15f),shade(t,0.8f),Shader.TileMode.CLAMP));c.drawRect(r,p);p.setShader(null);

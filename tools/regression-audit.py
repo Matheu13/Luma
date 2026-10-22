@@ -98,9 +98,16 @@ def frames_while_browsing():
     total = int(re.search(r'Total frames rendered: (\d+)', info).group(1)); jank = float(re.search(r'Janky frames: \d+ \(([\d.]+)%\)', info).group(1))
     return total - round(elapsed), jank
 
+def top_area_darkness(name):
+    # Mean brightness (0-255) of the top area's empty right side, behind where its white title sits.
+    from PIL import Image
+    return sum(Image.open(OUT / f'{name}.png').convert('L').crop((1300, 300, 1900, 460)).getdata()) / (600 * 160)
+
 def daylight_checks():
     # Daylight shows every app: the dock in row 1, the rest below. Starts and ends on row 1 of a fresh Luma.
-    shot('theme-Daylight'); key(22); shot('daylight-next')
+    shot('theme-Daylight'); b = top_area_darkness('theme-Daylight')
+    record('Daylight top area keeps white text readable', b < 120, f'mean brightness {b:.0f}')
+    key(22); shot('daylight-next')
     d = top_diff('theme-Daylight', 'daylight-next'); record('Daylight top area follows focus', d > 8, f'top-half difference {d:.1f}')
     key(21); key(20); shot('daylight-scrolled'); d = top_diff('theme-Daylight', 'daylight-scrolled')
     record('Daylight scrolls down', d > 8, f'top-half difference {d:.1f}'); key(19)
