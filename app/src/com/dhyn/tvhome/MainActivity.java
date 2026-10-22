@@ -5,8 +5,10 @@ import android.app.*;import android.os.*;import android.content.*;import android
 // Luma: a TV home screen drawn on one canvas. Remote keys are handled directly and every pop-up is a Luma panel.
 public class MainActivity extends Activity {
 
-static final String[] THEMES={"lunar","aurora","cinema","prism","nebula"},TITLES={"Lunar","Aurora","Cinema Shelf","Prism","Nebula"};
-static final int[] ACCENT={0xffc9d6e8,0xff6ff3e6,0xffe8b05c,0xffd98cff,0xffa48bff};
+static final String[] THEMES={"lunar","aurora","cinema","prism","nebula","daylight"},TITLES={"Lunar","Aurora","Cinema Shelf","Prism","Nebula","Daylight"};
+static final int[] ACCENT={0xffc9d6e8,0xff6ff3e6,0xffe8b05c,0xffd98cff,0xffa48bff,0xff3d7cf5};
+// Daylight shows every app on the home screen: the dock in the first row, the rest below.
+static final int DAYLIGHT=5;
 // Dock apps used until the viewer saves their own; any that are not installed are skipped.
 static final String[] DEFAULTS={"com.amazon.firetv.youtube","com.google.android.youtube.tv","com.netflix.ninja","com.amazon.firebat","com.amazon.amazonvideo.livingroom","com.disney.disneyplus","com.plexapp.android","org.xbmc.kodi","com.spotify.tv.android"};
 static final int DOCK=7;
@@ -38,7 +40,7 @@ for(String old:new String[]{"com.dhyn.tvhome.LumaLauncher","com.dhyn.tvhome.Main
 public void onCreate(Bundle b){super.onCreate(b);getWindow().setFlags(1024,1024);migratePrefs();fireTv=getPackageManager().hasSystemFeature("amazon.hardware.fire_tv");
 // Fire TV keeps Amazon's launcher as Home (Home on Fire hands over to Luma); elsewhere Luma offers itself as a Home app.
 if(!fireTv)try{getPackageManager().setComponentEnabledSetting(new ComponentName(this,"com.dhyn.tvhome.LumaHome"),PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);}catch(Exception ignored){}
-theme=Math.max(0,Math.min(4,prefs().getInt("theme",0)));refreshApps();screen=new Screen();setContentView(screen);IntentFilter f=new IntentFilter();f.addAction(Intent.ACTION_PACKAGE_ADDED);f.addAction(Intent.ACTION_PACKAGE_REMOVED);f.addAction(Intent.ACTION_PACKAGE_CHANGED);f.addDataScheme("package");registerReceiver(packageObserver,f);}
+theme=Math.max(0,Math.min(5,prefs().getInt("theme",0)));refreshApps();screen=new Screen();setContentView(screen);IntentFilter f=new IntentFilter();f.addAction(Intent.ACTION_PACKAGE_ADDED);f.addAction(Intent.ACTION_PACKAGE_REMOVED);f.addAction(Intent.ACTION_PACKAGE_CHANGED);f.addDataScheme("package");registerReceiver(packageObserver,f);}
 // Home pressed again while Luma is open: back to the dock.
 @Override protected void onNewIntent(Intent i){super.onNewIntent(i);if(moving){moving=false;saveOrder();}panel=null;nav=-1;all=false;hintUntil=System.currentTimeMillis()+6000;screen.invalidate();}
 @Override protected void onResume(){super.onResume();refreshApps();active=true;hintUntil=System.currentTimeMillis()+6000;clockHandler.removeCallbacks(tick);clockHandler.post(tick);}
@@ -46,15 +48,20 @@ theme=Math.max(0,Math.min(4,prefs().getInt("theme",0)));refreshApps();screen=new
 @Override protected void onDestroy(){clockHandler.removeCallbacks(tick);unregisterReceiver(packageObserver);super.onDestroy();}
 // Consume TV navigation before Android's focus search can swallow arrows.
 @Override public boolean dispatchKeyEvent(KeyEvent e){int k=e.getKeyCode();if(k==19||k==20||k==21||k==22||k==23||k==66||k==82||k==4){return e.getAction()==KeyEvent.ACTION_DOWN?onKeyDown(k,e):onKeyUp(k,e);}return super.dispatchKeyEvent(e);}
-ArrayList<App> visible(){return all?apps:favourites;}
+ArrayList<App> visible(){if(daylight()){ArrayList<App> v=new ArrayList<>(favourites);v.addAll(rest());return v;}return all?apps:favourites;}
+boolean daylight(){return theme==DAYLIGHT&&!all;}
+ArrayList<App> rest(){ArrayList<App> r=new ArrayList<>();for(App a:apps)if(!favourites.contains(a))r.add(a);return r;}
+boolean inDock(int i){return !all&&(theme!=DAYLIGHT||i<favourites.size());}
+// Swaps two visible apps in the list they belong to; in Daylight an app cannot cross between the dock row and the rest.
+boolean swapVisible(int a,int b){if(!daylight()){Collections.swap(visible(),a,b);return true;}int f=favourites.size();if((a<f)!=(b<f))return false;if(a<f){Collections.swap(favourites,a,b);return true;}ArrayList<App> v=visible();Collections.swap(apps,apps.indexOf(v.get(a)),apps.indexOf(v.get(b)));return true;}
 void saveOrder(){StringBuilder b=new StringBuilder();for(App a:apps){if(b.length()>0)b.append("|");b.append(a.pkg);}StringBuilder dock=new StringBuilder();for(App a:favourites){if(dock.length()>0)dock.append("|");dock.append(a.pkg);}prefs().edit().putString("appOrder",b.toString()).putString("dockOrder",dock.toString()).apply();}
 
 void restoreOrder(){String saved=prefs().getString("appOrder","");ArrayList<App> ordered=new ArrayList<>();for(String pkg:saved.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!ordered.contains(a))ordered.add(a);}for(App a:apps)if(!ordered.contains(a))ordered.add(a);apps=ordered;String dock=prefs().getString("dockOrder",saved);favourites=new ArrayList<>();for(String pkg:dock.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!favourites.contains(a)&&favourites.size()<DOCK)favourites.add(a);}for(App a:apps)if(favourites.size()<DOCK&&!favourites.contains(a))favourites.add(a);}
 
 void putInDock(int slot,App chosen){int existing=favourites.indexOf(chosen);if(existing>=0)Collections.swap(favourites,slot,existing);else favourites.set(slot,chosen);saveOrder();}
 void chooseFavourite(int slot,Panel from){String[] labels=new String[apps.size()];for(int j=0;j<apps.size();j++)labels[j]=apps.get(j).name;Panel q=new Panel("Dock slot "+(slot+1),labels,from);q.sel=Math.max(0,apps.indexOf(favourites.get(slot)));show(q,w->{putInDock(slot,apps.get(w));selected=slot;});}
-void appOptions(){if(visible().isEmpty())return;App a=visible().get(selected);Panel q=new Panel(a.name,new String[]{"Move app",all?"Add to dock":"Choose app for this slot","Cancel"},null);
-show(q,w->{if(w==0){moving=true;hintUntil=Long.MAX_VALUE;}else if(w==1&&!all)chooseFavourite(selected,q);else if(w==1){String[] slots=new String[favourites.size()];for(int j=0;j<slots.length;j++)slots[j]="Slot "+(j+1)+": "+favourites.get(j).name;show(new Panel("Add "+a.name+" to dock",slots,q),slot->putInDock(slot,a));}screen.invalidate();});}
+void appOptions(){if(visible().isEmpty())return;App a=visible().get(selected);boolean dock=inDock(selected);Panel q=new Panel(a.name,new String[]{"Move app",dock?"Choose app for this slot":"Add to dock","Cancel"},null);
+show(q,w->{if(w==0){moving=true;hintUntil=Long.MAX_VALUE;}else if(w==1&&dock)chooseFavourite(selected,q);else if(w==1){String[] slots=new String[favourites.size()];for(int j=0;j<slots.length;j++)slots[j]="Slot "+(j+1)+": "+favourites.get(j).name;show(new Panel("Add "+a.name+" to dock",slots,q),slot->putInDock(slot,a));}screen.invalidate();});}
 @Override public boolean onKeyUp(int k,KeyEvent e){if(k==23||k==66){if(panel==null&&nav<0&&!held&&!moving)launch(selected);held=false;return true;}return super.onKeyUp(k,e);}
 
 void menu(){Panel q=new Panel("Luma",new String[]{"Home","All apps","Settings","Arrange selected app"},null);show(q,w->{if(w==2)settingsPanel(q);else if(w==3)appOptions();else{all=w==1;selected=0;nav=-1;}});}
@@ -73,12 +80,14 @@ if(k==19)q.sel=(q.sel+m-1)%m;else if(k==20)q.sel=(q.sel+1)%m;else if(k==23||k==6
 
 public boolean onKeyDown(int k,KeyEvent e){if(panel!=null)return panelKey(k,e);if(k==82){nav=-1;menu();return true;}if(apps.isEmpty())return true;int n=visible().size();
 if((k==23||k==66)&&nav<0){if(moving){moving=false;hintUntil=0;saveOrder();held=true;screen.invalidate();return true;}if(e.getRepeatCount()>0&&!held){held=true;appOptions();}return true;}
-if(moving){int old=selected,step=all?7:theme==4?4:7;if(k==21)selected=Math.max(0,selected-1);else if(k==22)selected=Math.min(n-1,selected+1);else if(k==19)selected=Math.max(0,selected-step);else if(k==20)selected=Math.min(n-1,selected+step);else if(k==4){moving=false;hintUntil=0;saveOrder();}Collections.swap(visible(),old,selected);screen.invalidate();return true;}
+if(moving){int old=selected,step=all?7:theme==4?4:7;if(k==21)selected=Math.max(0,selected-1);else if(k==22)selected=Math.min(n-1,selected+1);else if(k==19)selected=Math.max(0,selected-step);else if(k==20)selected=Math.min(n-1,selected+step);else if(k==4){moving=false;hintUntil=0;saveOrder();}if(!swapVisible(old,selected))selected=old;screen.invalidate();return true;}
 int cols=all?7:(theme==4?4:7);
 if(nav>=0){if(k==21)nav=(nav+2)%3;else if(k==22)nav=(nav+1)%3;else if(k==20||k==4)nav=-1;else if(k==23||k==66){held=true;if(nav==2)settingsPanel(null);else{all=nav==1;selected=0;nav=-1;}}screen.invalidate();return true;}
 if(k==19&&selected<cols){nav=all?1:0;screen.invalidate();return true;}
 // Back at the top level does nothing: a launcher has nowhere to go back to, and finishing would flash Amazon's home.
 if(k==4){if(all){all=false;selected=0;screen.invalidate();}return true;}
+// Daylight scrolls through rows instead of wrapping: Down stops at the last row, landing on its nearest app.
+if(daylight()&&(k==20||k==19)){if(k==20&&selected/7<(n-1)/7)selected=Math.min(selected+7,n-1);else if(k==19)selected-=7;screen.invalidate();return true;}
 if(k==21)selected=(selected+n-1)%n;else if(k==22)selected=(selected+1)%n;else if(k==20)selected=(selected+cols)%n;else if(k==19)selected=(selected-cols+n)%n;else return super.onKeyDown(k,e);screen.invalidate();return true;}
 
 class Screen extends View {
@@ -105,9 +114,11 @@ int accent=ACCENT[theme];
 text(c,"Home",65,70,25,all?0xffaaaaaa:Color.WHITE);text(c,"Apps",185,70,25,all?Color.WHITE:0xffaaaaaa);gear(c,1440,58,17);
 text(c,new java.text.SimpleDateFormat("HH:mm",Locale.getDefault()).format(new Date()),1510,66,30,Color.WHITE);text(c,new java.text.SimpleDateFormat("EEE d MMM",Locale.getDefault()).format(new Date()),1512,92,17,0xffc0c5cf);
 
-if(!all&&theme!=4){int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);greetings[0]=hour<12?"Good morning.":hour<18?"Good afternoon.":"Good evening.";float y=theme==0?330:theme==2?295:280;if(theme==1){p.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));p.setTextSize(76);p.setColor(Color.WHITE);c.drawText("Your night",60,235,p);p.setShader(new LinearGradient(60,0,570,0,new int[]{0xff9affee,0xff8872ff},null,Shader.TileMode.CLAMP));c.drawText("starts here.",60,320,p);p.setShader(null);}else text(c,greetings[theme],60,y,theme==2?68:70,Color.WHITE);}if(all)text(c,"Your apps",60,150,52,Color.WHITE);
+if(!all&&theme!=4&&theme!=DAYLIGHT){int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);greetings[0]=hour<12?"Good morning.":hour<18?"Good afternoon.":"Good evening.";float y=theme==0?330:theme==2?295:280;if(theme==1){p.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));p.setTextSize(76);p.setColor(Color.WHITE);c.drawText("Your night",60,235,p);p.setShader(new LinearGradient(60,0,570,0,new int[]{0xff9affee,0xff8872ff},null,Shader.TileMode.CLAMP));c.drawText("starts here.",60,320,p);p.setShader(null);}else text(c,greetings[theme],60,y,theme==2?68:70,Color.WHITE);}if(all)text(c,"Your apps",60,150,52,Color.WHITE);
 
-int n=visible().size();hit=new RectF[n];int cols=all?7:(theme==4?4:7);float tileW=all?195:theme==4?225:theme==2?207:201;float tileH=all?145:theme==4?210:theme==2?420:theme==0?162:theme==1?195:210;float left=all?60:theme==4?620:60;float top=all?200:theme==4?305:theme==2?365:theme==0?660:390;float gap=all?25:theme==4?18:20;
+int n=visible().size();hit=new RectF[n];
+if(daylight()){ArrayList<App> v=visible();for(int i=0;i<n;i++){RectF r=daylightRect(i);hit[i]=r;daylightCard(c,v.get(i),r,i==selected&&nav<0);}n=0;}
+int cols=all?7:(theme==4?4:7);float tileW=all?195:theme==4?225:theme==2?207:201;float tileH=all?145:theme==4?210:theme==2?420:theme==0?162:theme==1?195:210;float left=all?60:theme==4?620:60;float top=all?200:theme==4?305:theme==2?365:theme==0?660:390;float gap=all?25:theme==4?18:20;
 // All apps shows four rows, keeping the selected row third from the top.
 int rowOffset=all?Math.max(0,selected/7-2):0;
 for(int i=0;i<n;i++){int row=i/cols-rowOffset,col=i%cols;if(row<0||all&&row>3)continue;
@@ -120,7 +131,7 @@ if(nav>=0)outline(c,navRect(nav),Color.WHITE,3,10);
 if(!all&&theme==4&&n>0){App a=visible().get(Math.min(selected,n-1));RectF plate=new RectF(155,300,375,490);c.save();Path clip=new Path();clip.addRoundRect(plate,22,22,Path.Direction.CW);c.clipPath(clip);slice(c,frost,plate,plate);p.setShader(new LinearGradient(0,plate.top,0,plate.bottom,alpha(a.tone(),0x99),0x22000000,Shader.TileMode.CLAMP));c.drawRect(plate,p);p.setShader(null);c.restore();outline(c,plate,0x40ffffff,1.5f,22);Drawable art=a.banner!=null?a.banner:a.icon;if(art!=null){RectF in=new RectF(plate);in.inset(22,a.banner!=null?48:34);drawArt(c,art,in);}text(c,label(a.name,440,60),155,560,60,Color.WHITE);text(c,"Open app  ›",155,655,30,Color.WHITE);}
 
 // Hint fades out a few seconds after the screen appears; move mode keeps it on.
-float ha=moving?1:Math.max(0,Math.min(1,(hintUntil-now)/600f));if(ha>0){text(c,moving?"Move mode: arrows move the app, OK saves":"Hold OK to arrange   ·   Menu for options",60,915,18,alpha(0xffc0c5cf,(int)(255*ha)));if(ha<1)animating=true;}
+float ha=moving?1:Math.max(0,Math.min(1,(hintUntil-now)/600f));if(ha>0){text(c,moving?"Move mode: arrows move the app, OK saves":"Hold OK to arrange   ·   Menu for options",60,915,18,alpha(daylight()?0xff4a4f5a:0xffc0c5cf,(int)(255*ha)));if(ha<1)animating=true;}
 
 if(panel!=null)drawPanel(c,accent);real.restore();announce();if(animating)postInvalidateOnAnimation();}
 
@@ -137,15 +148,24 @@ float s=all?62:theme==0?74:theme==1?110:theme==2?110:88,cy=all?r.top+56:r.top+r.
 if(art!=null){RectF box=a.banner!=null?new RectF(r.left+16,cy-s*0.62f,r.right-16,cy+s*0.62f):new RectF(r.centerX()-s*0.7f,cy-s/2,r.centerX()+s*0.7f,cy+s/2);drawArt(c,art,box);}
 if(all||theme!=1){float size=all?19:theme==2?30:theme==4?24:theme==3?22:20;p.setTypeface(Typeface.create("sans-serif-light",0));p.setTextSize(size);while(size>16&&p.measureText(a.name)>r.width()-24)p.setTextSize(--size);p.setTextAlign(Paint.Align.CENTER);text(c,label(a.name,r.width()-24,size),r.centerX(),r.bottom-(all?16:theme==2?44:theme==0?16:20),size,theme==0&&!all?0xffd8dbe0:Color.WHITE);p.setTextAlign(Paint.Align.LEFT);}}
 
-void drawPanel(Canvas c,int accent){Panel q=panel;int rows=Math.min(q.items.length,8);float w=660,rowH=58,h=116+rows*rowH;float x=(1672-w)/2,y=(941-h)/2;
-p.setShader(null);p.setColor(0xa0000000);c.drawRect(0,0,1672,941,p);RectF box=new RectF(x,y,x+w,y+h);c.save();Path clip=new Path();clip.addRoundRect(box,26,26,Path.Direction.CW);c.clipPath(clip);slice(c,frost,box,box);p.setColor(0xd80c1019);c.drawRect(box,p);c.restore();outline(c,box,0x40ffffff,1.5f,26);
-text(c,label(q.title,w-72,30),x+36,y+62,30,Color.WHITE);if(q.sel<q.top)q.top=q.sel;if(q.sel>=q.top+rows)q.top=q.sel-rows+1;rowHit=new RectF[rows];rowFirst=q.top;
-for(int i=0;i<rows;i++){int it=q.top+i;RectF r=new RectF(x+20,y+92+i*rowH,x+w-20,y+92+i*rowH+rowH-6);rowHit[i]=r;if(it==q.sel){round(c,r,alpha(accent,0x30),14);outline(c,r,accent,2,14);}text(c,label(q.items[it],w-120,24),r.left+20,r.centerY()+8,24,it==q.sel?Color.WHITE:0xffc0c5cf);if(it==q.checked){p.setColor(accent);c.drawCircle(r.right-28,r.centerY(),7,p);}}
-if(q.top>0)text(c,"▲",x+w-46,y+62,18,0xffc0c5cf);if(q.top+rows<q.items.length)text(c,"▼",x+w-46,y+h-14,18,0xffc0c5cf);}
+// Daylight's tiles: seven to a row, 200x120, laid out in content space (before scrolling).
+RectF daylightRect(int i){int r=i/7,col=i%7;float l=52+col*(200+28),t=500+r*(120+40);return new RectF(l,t,l+200,t+120);}
+// A rounded tile tinted with the app's colour, showing its TV banner, or its icon when it has none.
+void daylightCard(Canvas c,App a,RectF r,boolean focused){int t=a.tone();c.save();Path clip=new Path();clip.addRoundRect(r,18,18,Path.Direction.CW);c.clipPath(clip);
+p.setShader(new LinearGradient(0,r.top,0,r.bottom,shade(t,1.15f),shade(t,0.8f),Shader.TileMode.CLAMP));c.drawRect(r,p);p.setShader(null);
+if(a.banner!=null){RectF in=new RectF(r);in.inset(10,10);drawArt(c,a.banner,in);}else if(a.icon!=null)drawArt(c,a.icon,new RectF(r.centerX()-32,r.centerY()-32,r.centerX()+32,r.centerY()+32));
+c.restore();outline(c,r,0x40ffffff,1.5f,18);if(focused)outline(c,r,Color.WHITE,4,18);}
+
+// Daylight's panels are light frosted glass with dark text; every other theme's are dark.
+void drawPanel(Canvas c,int accent){Panel q=panel;int rows=Math.min(q.items.length,8);float w=660,rowH=58,h=116+rows*rowH;float x=(1672-w)/2,y=(941-h)/2;boolean light=theme==DAYLIGHT;int ink=light?0xff1c1f26:Color.WHITE,dim=light?0xff4a4f5a:0xffc0c5cf;
+p.setShader(null);p.setColor(light?0x55000000:0xa0000000);c.drawRect(0,0,1672,941,p);RectF box=new RectF(x,y,x+w,y+h);c.save();Path clip=new Path();clip.addRoundRect(box,26,26,Path.Direction.CW);c.clipPath(clip);slice(c,frost,box,box);p.setColor(light?0xe6ffffff:0xd80c1019);c.drawRect(box,p);c.restore();outline(c,box,0x40ffffff,1.5f,26);
+text(c,label(q.title,w-72,30),x+36,y+62,30,ink);if(q.sel<q.top)q.top=q.sel;if(q.sel>=q.top+rows)q.top=q.sel-rows+1;rowHit=new RectF[rows];rowFirst=q.top;
+for(int i=0;i<rows;i++){int it=q.top+i;RectF r=new RectF(x+20,y+92+i*rowH,x+w-20,y+92+i*rowH+rowH-6);rowHit[i]=r;if(it==q.sel){round(c,r,alpha(accent,0x30),14);outline(c,r,accent,2,14);}text(c,label(q.items[it],w-120,24),r.left+20,r.centerY()+8,24,it==q.sel?ink:dim);if(it==q.checked){p.setColor(accent);c.drawCircle(r.right-28,r.centerY(),7,p);}}
+if(q.top>0)text(c,"▲",x+w-46,y+62,18,dim);if(q.top+rows<q.items.length)text(c,"▼",x+w-46,y+h-14,18,dim);}
 
 // Screen-reader support: tiles, top-bar items and panel rows are virtual nodes with names and actions.
 String[] navNames={"Home tab","Apps tab","Settings"};String lastSaid="";
-String speak(int i){App a=visible().get(i);return (moving?"Moving ":"")+a.name+", "+(all?"app ":"dock ")+(i+1)+" of "+visible().size()+(moving?". Arrows move, OK saves":"");}
+String speak(int i){ArrayList<App> v=visible();App a=v.get(i);int f=favourites.size();String where=daylight()?(i<f?"dock "+(i+1)+" of "+f:"app "+(i-f+1)+" of "+(v.size()-f)):(all?"app ":"dock ")+(i+1)+" of "+v.size();return (moving?"Moving ":"")+a.name+", "+where+(moving?". Arrows move, OK saves":"");}
 RectF navRect(int k){return k==0?new RectF(50,30,150,90):k==1?new RectF(170,30,275,90):new RectF(1408,26,1472,90);}
 Rect toScreen(RectF r){int[] o=new int[2];getLocationOnScreen(o);float ox=o[0]+(getWidth()-1672*scale)/2,oy=o[1]+(getHeight()-941*scale)/2;return new Rect((int)(ox+r.left*scale),(int)(oy+r.top*scale),(int)(ox+r.right*scale),(int)(oy+r.bottom*scale));}
 void announce(){String said=panel!=null?panel.title+": "+panel.items[panel.sel]:nav>=0?navNames[nav]:visible().isEmpty()?"No apps":speak(Math.min(selected,visible().size()-1));if(said.equals(lastSaid))return;lastSaid=said;AccessibilityManager am=(AccessibilityManager)getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);if(am!=null&&am.isEnabled())post(()->announceForAccessibility(said));}

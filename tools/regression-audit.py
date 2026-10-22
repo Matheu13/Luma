@@ -76,10 +76,24 @@ def choose_theme(name):
     key(82, 1.0); key(20, 0.6); key(20, 0.6)
     if panel_selected() != 'Settings': key(4); return False
     key(23, 1.0); key(23, 1.0)
-    for _ in range(6):
+    for _ in range(7):
         if panel_selected() == name: key(23, 1.0); return True
         key(20, 0.6)
     key(4); key(4); return False
+
+def daylight_checks():
+    # Daylight shows every app: the dock in row 1, the rest below. Starts and ends on row 1 of a fresh Luma.
+    key(20); record('Daylight down reaches lower rows', ', app ' in selected(), selected())
+    key(19); record('Daylight up returns to the dock row', ', dock ' in selected(), selected())
+    key(20); key(23, 1.2, long=True); items = texts()
+    record('Daylight lower row offers Add to dock', 'Add to dock' in items, ' / '.join(t for t in items if t)); key(4)
+    key(23, 5); record('Daylight lower-row app opens', 'com.dhyn.luma/' not in fg(), fg())
+    key(3, 3); record('Home returns Luma from Daylight', 'com.dhyn.luma/' in fg(), fg())
+    # Moving the last dock app down must not swap it with an app outside the dock.
+    root(); before = dock(); ok = go_to(before[6])
+    if ok: key(23, 1.2, long=True); ok = 'Move app' in texts()
+    if ok: key(23, 1.0); key(20, 1.0); key(23, 1.0)
+    root(); record('Daylight move stays in the dock row', ok and dock() == before, ' / '.join(dock()))
 
 def run():
     root(); record('Cold launch', 'com.dhyn.luma/' in fg(), fg()); shot('01-launch')
@@ -128,12 +142,18 @@ def run():
 
     record('Amazon remains OS Home', 'com.amazon.tv.launcher/' in sh('cmd', 'package', 'resolve-activity', '--brief', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME'), 'resolver')
 
+    # Appearance (Menu > Settings > Appearance) lists all six themes; Menu closes the panels again.
+    root(); key(82, 1.0); key(20, 0.6); key(20, 0.6); key(23, 1.0); key(23, 1.0); items = texts(); key(82, 1.0)
+    themes = ['Lunar', 'Aurora', 'Cinema Shelf', 'Prism', 'Daylight', 'Nebula']
+    record('Appearance lists six themes', all(t in items for t in themes), ' / '.join(t for t in items if t))
+
     # Themes through Menu > Settings > Appearance with remote keys, ending on Nebula.
     root()
-    for t in ['Lunar', 'Aurora', 'Cinema Shelf', 'Prism', 'Nebula']:
+    for t in themes:
         ok = choose_theme(t); time.sleep(1.5)
         shot('theme-' + t.replace(' ', '-'))
         record(f'Theme {t} renders', ok and 'Lunar' not in texts() and 'com.dhyn.luma/' in fg(), fg() if ok else 'could not reach the theme in the Appearance panel')
+        if t == 'Daylight' and ok: daylight_checks()
 
     (OUT / 'memory.txt').write_text(sh('dumpsys', 'meminfo', 'com.dhyn.luma'))
 
