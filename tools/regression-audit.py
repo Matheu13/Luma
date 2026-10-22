@@ -103,14 +103,34 @@ def top_area_darkness(name):
     from PIL import Image
     return sum(Image.open(OUT / f'{name}.png').convert('L').crop((1300, 300, 1900, 460)).getdata()) / (600 * 160)
 
+def untinted_tiles(name):
+    # Second-row tiles (unfocused, page not scrolled): each tile's top strip, above its banner, is the app's own tint.
+    # Counts tiles whose strip is still nearly the bare wallpaper, i.e. drawn see-through. Screen = design * 1920/1672.
+    from PIL import Image, ImageChops
+    k = 1920 / 1672; shot_im = Image.open(OUT / f'{name}.png').convert('RGB')
+    wall = Image.open(ROOT / 'app' / 'assets' / 'daylight-wallpaper.png').convert('RGB').resize((1920, 1081))
+    pale = 0
+    for col in range(7):
+        l = 52 + col * 228; box = (int((l + 20) * k), int(662 * k), int((l + 180) * k), int(668 * k))
+        d = ImageChops.difference(shot_im.crop(box), wall.crop(box)); diff = sum(sum(px) for px in d.getdata()) / (3 * len(d.getdata()))
+        pale += diff < 30
+    return pale
+
+def top_bar_overlap():
+    # Bounds of dock tiles (screen px) that intrude into the top bar's band (y 20-110) while the page is scrolled.
+    return [n.get('content-desc') for n in nodes() if re.search(r'dock \d of', n.get('content-desc', ''))
+            and (lambda y, yy: y < 110 and yy > 20)(*map(int, re.findall(r'\d+', n.get('bounds'))[1::2]))]
+
 def daylight_checks():
     # Daylight shows every app: the dock in row 1, the rest below. Starts and ends on row 1 of a fresh Luma.
     shot('theme-Daylight'); b = top_area_darkness('theme-Daylight')
     record('Daylight top area keeps white text readable', b < 120, f'mean brightness {b:.0f}')
+    pale = untinted_tiles('theme-Daylight'); record('Daylight tiles keep their full tint', pale == 0, f'{pale} of 7 second-row tiles drawn see-through')
     key(22); shot('daylight-next')
     d = top_diff('theme-Daylight', 'daylight-next'); record('Daylight top area follows focus', d > 8, f'top-half difference {d:.1f}')
     key(21); key(20); shot('daylight-scrolled'); d = top_diff('theme-Daylight', 'daylight-scrolled')
-    record('Daylight scrolls down', d > 8, f'top-half difference {d:.1f}'); key(19)
+    record('Daylight scrolls down', d > 8, f'top-half difference {d:.1f}')
+    over = top_bar_overlap(); record('Daylight scrolled rows clear the top bar', not over, ' / '.join(over) or 'no dock tile under the top bar'); key(19)
     key(20); record('Daylight down reaches lower rows', ', app ' in selected(), selected())
     key(19); record('Daylight up returns to the dock row', ', dock ' in selected(), selected())
     key(20); key(23, 1.2, long=True); items = texts()
