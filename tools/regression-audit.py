@@ -88,13 +88,15 @@ def top_diff(a, b):
     return sum(ImageChops.difference(*im).getdata()) / (1920 * 540)
 
 def frames_while_browsing():
-    # Twelve arrow presses along the first row, then Luma's own frame statistics: (frames rendered, janky percent).
-    # Waits first so the start-up hint has finished fading; the clock still redraws about once a second.
-    time.sleep(8); sh('dumpsys', 'gfxinfo', 'com.dhyn.luma', 'reset')
+    # Twelve arrow presses along the first row, then Luma's own frame statistics: (frames from key presses, janky percent).
+    # Waits first so the start-up hint has finished fading. The clock redraws once a second and each ADB key press
+    # takes about 2.5 s on a Fire TV, so one frame per elapsed second is subtracted: a static theme leaves about one
+    # frame per press, an animated focus many more.
+    time.sleep(8); sh('dumpsys', 'gfxinfo', 'com.dhyn.luma', 'reset'); start = time.time()
     for k in [22] * 6 + [21] * 6: key(k, 0.4)
-    info = sh('dumpsys', 'gfxinfo', 'com.dhyn.luma')
+    elapsed = time.time() - start; info = sh('dumpsys', 'gfxinfo', 'com.dhyn.luma')
     total = int(re.search(r'Total frames rendered: (\d+)', info).group(1)); jank = float(re.search(r'Janky frames: \d+ \(([\d.]+)%\)', info).group(1))
-    return total, jank
+    return total - round(elapsed), jank
 
 def daylight_checks():
     # Daylight shows every app: the dock in row 1, the rest below. Starts and ends on row 1 of a fresh Luma.
@@ -114,7 +116,7 @@ def daylight_checks():
     if ok: key(23, 1.0); key(20, 1.0); key(23, 1.0)
     root(); record('Daylight move stays in the dock row', ok and dock() == before, ' / '.join(dock()))
     total, jank = frames_while_browsing()
-    record('Daylight focus animates smoothly', total > 30 and jank < 10, f'{total} frames, {jank}% janky')
+    record('Daylight focus animates smoothly', total > 36 and jank < 10, f'{total} frames from 12 presses, {jank}% janky')
 
 def run():
     root(); record('Cold launch', 'com.dhyn.luma/' in fg(), fg()); shot('01-launch')
@@ -177,7 +179,7 @@ def run():
         if t == 'Daylight' and ok: daylight_checks()
     # Back on Nebula: focus moves must stay static there (about one frame per key press plus the clock).
     total, jank = frames_while_browsing()
-    record('Other themes stay static', total <= 24, f'{total} frames on Nebula')
+    record('Other themes stay static', total <= 24, f'{total} frames from 12 presses on Nebula')
 
     (OUT / 'memory.txt').write_text(sh('dumpsys', 'meminfo', 'com.dhyn.luma'))
 
