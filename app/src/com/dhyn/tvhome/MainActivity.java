@@ -30,10 +30,15 @@ for(String pkg:DEFAULTS){App a=seen.add(pkg)?makeApp(pkg):null;if(a!=null)found.
 for(String category:new String[]{Intent.CATEGORY_LEANBACK_LAUNCHER,Intent.CATEGORY_LAUNCHER})for(ResolveInfo r:pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(category),0)){String pkg=r.activityInfo.packageName;if(!seen.add(pkg))continue;App a=makeApp(pkg);if(a!=null)found.add(a);}
 apps=found;restoreOrder();selected=0;for(int j=0;focus!=null&&j<visible().size();j++)if(visible().get(j).pkg.equals(focus))selected=j;if(screen!=null)screen.invalidate();}
 
-public void onCreate(Bundle b){super.onCreate(b);getWindow().setFlags(1024,1024);fireTv=getPackageManager().hasSystemFeature("amazon.hardware.fire_tv");
+// One settings file for every launch entry. Activity.getPreferences was keyed by the entry Luma was opened through, which kept two diverging copies.
+SharedPreferences prefs(){return getSharedPreferences("luma",0);}
+void migratePrefs(){SharedPreferences p=prefs();if(p.contains("dockOrder")||p.contains("appOrder")||p.contains("theme"))return;
+for(String old:new String[]{"com.dhyn.tvhome.LumaLauncher","com.dhyn.tvhome.MainActivity"}){SharedPreferences o=getSharedPreferences(old,0);if(!o.contains("dockOrder"))continue;SharedPreferences.Editor e=p.edit();for(Map.Entry<String,?> en:o.getAll().entrySet()){Object v=en.getValue();if(v instanceof String)e.putString(en.getKey(),(String)v);else if(v instanceof Integer)e.putInt(en.getKey(),(Integer)v);}e.commit();return;}}
+
+public void onCreate(Bundle b){super.onCreate(b);getWindow().setFlags(1024,1024);migratePrefs();fireTv=getPackageManager().hasSystemFeature("amazon.hardware.fire_tv");
 // Fire TV keeps Amazon's launcher as Home (Home on Fire hands over to Luma); elsewhere Luma offers itself as a Home app.
 if(!fireTv)try{getPackageManager().setComponentEnabledSetting(new ComponentName(this,"com.dhyn.tvhome.LumaHome"),PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);}catch(Exception ignored){}
-theme=Math.max(0,Math.min(4,getPreferences(0).getInt("theme",0)));refreshApps();screen=new Screen();setContentView(screen);IntentFilter f=new IntentFilter();f.addAction(Intent.ACTION_PACKAGE_ADDED);f.addAction(Intent.ACTION_PACKAGE_REMOVED);f.addAction(Intent.ACTION_PACKAGE_CHANGED);f.addDataScheme("package");registerReceiver(packageObserver,f);}
+theme=Math.max(0,Math.min(4,prefs().getInt("theme",0)));refreshApps();screen=new Screen();setContentView(screen);IntentFilter f=new IntentFilter();f.addAction(Intent.ACTION_PACKAGE_ADDED);f.addAction(Intent.ACTION_PACKAGE_REMOVED);f.addAction(Intent.ACTION_PACKAGE_CHANGED);f.addDataScheme("package");registerReceiver(packageObserver,f);}
 // Home pressed again while Luma is open: back to the dock.
 @Override protected void onNewIntent(Intent i){super.onNewIntent(i);if(moving){moving=false;saveOrder();}panel=null;nav=-1;all=false;hintUntil=System.currentTimeMillis()+6000;screen.invalidate();}
 @Override protected void onResume(){super.onResume();refreshApps();active=true;hintUntil=System.currentTimeMillis()+6000;clockHandler.removeCallbacks(tick);clockHandler.post(tick);}
@@ -42,9 +47,9 @@ theme=Math.max(0,Math.min(4,getPreferences(0).getInt("theme",0)));refreshApps();
 // Consume TV navigation before Android's focus search can swallow arrows.
 @Override public boolean dispatchKeyEvent(KeyEvent e){int k=e.getKeyCode();if(k==19||k==20||k==21||k==22||k==23||k==66||k==82||k==4){return e.getAction()==KeyEvent.ACTION_DOWN?onKeyDown(k,e):onKeyUp(k,e);}return super.dispatchKeyEvent(e);}
 ArrayList<App> visible(){return all?apps:favourites;}
-void saveOrder(){StringBuilder b=new StringBuilder();for(App a:apps){if(b.length()>0)b.append("|");b.append(a.pkg);}StringBuilder dock=new StringBuilder();for(App a:favourites){if(dock.length()>0)dock.append("|");dock.append(a.pkg);}getPreferences(0).edit().putString("appOrder",b.toString()).putString("dockOrder",dock.toString()).apply();}
+void saveOrder(){StringBuilder b=new StringBuilder();for(App a:apps){if(b.length()>0)b.append("|");b.append(a.pkg);}StringBuilder dock=new StringBuilder();for(App a:favourites){if(dock.length()>0)dock.append("|");dock.append(a.pkg);}prefs().edit().putString("appOrder",b.toString()).putString("dockOrder",dock.toString()).apply();}
 
-void restoreOrder(){String saved=getPreferences(0).getString("appOrder","");ArrayList<App> ordered=new ArrayList<>();for(String pkg:saved.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!ordered.contains(a))ordered.add(a);}for(App a:apps)if(!ordered.contains(a))ordered.add(a);apps=ordered;String dock=getPreferences(0).getString("dockOrder",saved);favourites=new ArrayList<>();for(String pkg:dock.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!favourites.contains(a)&&favourites.size()<DOCK)favourites.add(a);}for(App a:apps)if(favourites.size()<DOCK&&!favourites.contains(a))favourites.add(a);}
+void restoreOrder(){String saved=prefs().getString("appOrder","");ArrayList<App> ordered=new ArrayList<>();for(String pkg:saved.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!ordered.contains(a))ordered.add(a);}for(App a:apps)if(!ordered.contains(a))ordered.add(a);apps=ordered;String dock=prefs().getString("dockOrder",saved);favourites=new ArrayList<>();for(String pkg:dock.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!favourites.contains(a)&&favourites.size()<DOCK)favourites.add(a);}for(App a:apps)if(favourites.size()<DOCK&&!favourites.contains(a))favourites.add(a);}
 
 void putInDock(int slot,App chosen){int existing=favourites.indexOf(chosen);if(existing>=0)Collections.swap(favourites,slot,existing);else favourites.set(slot,chosen);saveOrder();}
 void chooseFavourite(int slot,Panel from){String[] labels=new String[apps.size()];for(int j=0;j<apps.size();j++)labels[j]=apps.get(j).name;Panel q=new Panel("Dock slot "+(slot+1),labels,from);q.sel=Math.max(0,apps.indexOf(favourites.get(slot)));show(q,w->{putInDock(slot,apps.get(w));selected=slot;});}
@@ -54,7 +59,7 @@ show(q,w->{if(w==0){moving=true;hintUntil=Long.MAX_VALUE;}else if(w==1&&!all)cho
 
 void menu(){Panel q=new Panel("Luma",new String[]{"Home","All apps","Settings","Arrange selected app"},null);show(q,w->{if(w==2)settingsPanel(q);else if(w==3)appOptions();else{all=w==1;selected=0;nav=-1;}});}
 void settingsPanel(Panel from){Panel q=new Panel("Settings",new String[]{"Appearance",fireTv?"Fire TV Settings":"TV Settings","About Luma"},from);show(q,w->{if(w==0)appearance(q);else if(w==1)systemSettings();else about(q);});}
-void appearance(Panel from){Panel q=new Panel("Appearance",TITLES,from);q.sel=q.checked=theme;show(q,w->{theme=w;selected=0;getPreferences(0).edit().putInt("theme",theme).apply();screen.load();});}
+void appearance(Panel from){Panel q=new Panel("Appearance",TITLES,from);q.sel=q.checked=theme;show(q,w->{theme=w;selected=0;prefs().edit().putInt("theme",theme).apply();screen.load();});}
 void about(Panel from){String v="";try{v=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}show(new Panel("Luma "+v,new String[]{"github.com/Matheu13/Luma","Close"},from),w->{});}
 void message(String m){show(new Panel(m,new String[]{"OK"},null),w->{});}
 
@@ -77,8 +82,7 @@ if(k==4){if(all){all=false;selected=0;screen.invalidate();}return true;}
 if(k==21)selected=(selected+n-1)%n;else if(k==22)selected=(selected+1)%n;else if(k==20)selected=(selected+cols)%n;else if(k==19)selected=(selected-cols+n)%n;else return super.onKeyDown(k,e);screen.invalidate();return true;}
 
 class Screen extends View {
-Paint p=new Paint(3);Bitmap bg,frost;RectF[] hit=new RectF[0];RectF[] rowHit=new RectF[0];int rowFirst;float scale,scroll;
-RectF ringFrom=new RectF(),ringTo=new RectF();int ringKey=Integer.MIN_VALUE;long ringT0;
+Paint p=new Paint(3);Bitmap bg,frost;RectF[] hit=new RectF[0];RectF[] rowHit=new RectF[0];int rowFirst;float scale;
 String[] greetings={"Good evening.","Your night starts here.","An evening well spent.","Set the mood.",""};
 Screen(){super(MainActivity.this);setFocusable(true);requestFocus();load();}
 Bitmap asset(String f){try(InputStream i=getAssets().open(f)){return BitmapFactory.decodeStream(i);}catch(Exception e){return null;}}
@@ -91,7 +95,6 @@ void round(Canvas c,RectF r,int color,float rad){p.setShader(null);p.setColor(co
 void outline(Canvas c,RectF r,int color,float width,float rad){p.setShader(null);p.setColor(color);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(width);c.drawRoundRect(r,rad,rad,p);p.setStyle(Paint.Style.FILL);}
 int shade(int c,float f){return Color.rgb(Math.min(255,(int)(Color.red(c)*f)),Math.min(255,(int)(Color.green(c)*f)),Math.min(255,(int)(Color.blue(c)*f)));}
 int alpha(int c,int a){return (c&0xffffff)|(a<<24);}
-float ease(float t){t=Math.max(0,Math.min(1,t));return 1-(1-t)*(1-t)*(1-t);}
 // Draws a region of a full-screen bitmap (wallpaper or its frosted copy) into r, matching the wallpaper underneath.
 void slice(Canvas c,Bitmap b,RectF src,RectF r){if(b==null)return;float sx=b.getWidth()/1672f,sy=b.getHeight()/941f;c.drawBitmap(b,new Rect((int)(src.left*sx),(int)(src.top*sy),(int)(src.right*sx),(int)(src.bottom*sy)),r,p);}
 
@@ -105,19 +108,14 @@ text(c,new java.text.SimpleDateFormat("HH:mm",Locale.getDefault()).format(new Da
 if(!all&&theme!=4){int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);greetings[0]=hour<12?"Good morning.":hour<18?"Good afternoon.":"Good evening.";float y=theme==0?330:theme==2?295:280;if(theme==1){p.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));p.setTextSize(76);p.setColor(Color.WHITE);c.drawText("Your night",60,235,p);p.setShader(new LinearGradient(60,0,570,0,new int[]{0xff9affee,0xff8872ff},null,Shader.TileMode.CLAMP));c.drawText("starts here.",60,320,p);p.setShader(null);}else text(c,greetings[theme],60,y,theme==2?68:70,Color.WHITE);}if(all)text(c,"Your apps",60,150,52,Color.WHITE);
 
 int n=visible().size();hit=new RectF[n];int cols=all?7:(theme==4?4:7);float tileW=all?195:theme==4?225:theme==2?207:201;float tileH=all?145:theme==4?210:theme==2?420:theme==0?162:theme==1?195:210;float left=all?60:theme==4?620:60;float top=all?200:theme==4?305:theme==2?365:theme==0?660:390;float gap=all?25:theme==4?18:20;
-// All apps scrolls smoothly towards keeping the selected row third from the top.
-float target=all?Math.max(0,selected/7-2):0;scroll+=(target-scroll)*0.3f;if(Math.abs(target-scroll)<0.01f)scroll=target;else animating=true;
-int key=nav>=0?-1-nav:(all?10000:0)+selected;boolean snap=ringKey==Integer.MIN_VALUE;if(key!=ringKey){ringKey=key;ringT0=now;ringFrom.set(ringCurrent(now-1));}
-float pr=ease((now-ringT0)/170f);if(pr<1)animating=true;
-if(all){c.save();c.clipRect(0,190,1672,941);}
-for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){if((i==selected&&nav<0)!=(pass==1))continue;float row=i/cols-(all?scroll:0);int col=i%cols;if(all&&(row<-1||row>4))continue;
-RectF r=new RectF(left+col*(tileW+gap),top+row*(tileH+22),left+col*(tileW+gap)+tileW,top+row*(tileH+22)+tileH);hit[i]=r;float zoom=pass==1?pr:0;
-c.save();if(zoom>0){float s=1+0.05f*zoom;c.scale(s,s,r.centerX(),r.centerY());for(int g=3;g>=1;g--){RectF gr=new RectF(r);gr.inset(-g*5,-g*5);round(c,gr,alpha(accent,(int)(18*zoom)),18+g*5);}}
-card(c,visible().get(i),r);if(!all&&theme==1)text(c,label(visible().get(i).name,r.width()-15,23),r.left+15,r.bottom+34,23,Color.WHITE);c.restore();}
-if(all)c.restore();
-
-// Focus ring glides from the previous item to the current one.
-if(nav>=0||n>0){ringTo.set(ringTarget());if(snap)ringFrom.set(ringTo);RectF ring=new RectF(ringFrom.left+(ringTo.left-ringFrom.left)*pr,ringFrom.top+(ringTo.top-ringFrom.top)*pr,ringFrom.right+(ringTo.right-ringFrom.right)*pr,ringFrom.bottom+(ringTo.bottom-ringFrom.bottom)*pr);if(!moving||nav>=0)outline(c,ring,nav>=0?Color.WHITE:theme==1?0xff9bf6ff:Color.WHITE,nav>=0?3:4,nav>=0?12:20);else outline(c,ring,accent,5,20);}
+// All apps shows four rows, keeping the selected row third from the top.
+int rowOffset=all?Math.max(0,selected/7-2):0;
+for(int i=0;i<n;i++){int row=i/cols-rowOffset,col=i%cols;if(row<0||all&&row>3)continue;
+RectF r=new RectF(left+col*(tileW+gap),top+row*(tileH+22),left+col*(tileW+gap)+tileW,top+row*(tileH+22)+tileH);hit[i]=r;
+card(c,visible().get(i),r);if(!all&&theme==1)text(c,label(visible().get(i).name,r.width()-15,23),r.left+15,r.bottom+34,23,Color.WHITE);
+// Focus: a plain outline on the selected tile, moving straight there with each key press, as in the original Luma.
+if(i==selected&&nav<0)outline(c,r,theme==1?0xff9bf6ff:Color.WHITE,4,18);}
+if(nav>=0)outline(c,navRect(nav),Color.WHITE,3,10);
 
 if(!all&&theme==4&&n>0){App a=visible().get(Math.min(selected,n-1));RectF plate=new RectF(155,300,375,490);c.save();Path clip=new Path();clip.addRoundRect(plate,22,22,Path.Direction.CW);c.clipPath(clip);slice(c,frost,plate,plate);p.setShader(new LinearGradient(0,plate.top,0,plate.bottom,alpha(a.tone(),0x99),0x22000000,Shader.TileMode.CLAMP));c.drawRect(plate,p);p.setShader(null);c.restore();outline(c,plate,0x40ffffff,1.5f,22);Drawable art=a.banner!=null?a.banner:a.icon;if(art!=null){RectF in=new RectF(plate);in.inset(22,a.banner!=null?48:34);drawArt(c,art,in);}text(c,label(a.name,440,60),155,560,60,Color.WHITE);text(c,"Open app  ›",155,655,30,Color.WHITE);}
 
@@ -128,8 +126,6 @@ if(panel!=null)drawPanel(c,accent);real.restore();announce();if(animating)postIn
 
 void gear(Canvas c,float cx,float cy,float r){p.setShader(null);p.setColor(Color.WHITE);p.setStyle(Paint.Style.FILL);for(int t=0;t<8;t++){double a=t*Math.PI/4;c.save();c.rotate((float)Math.toDegrees(a),cx,cy);c.drawRoundRect(new RectF(cx-3.5f,cy-r-5,cx+3.5f,cy-r+4),2,2,p);c.restore();}p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(5);c.drawCircle(cx,cy,r-2,p);p.setStrokeWidth(3);c.drawCircle(cx,cy,5,p);p.setStyle(Paint.Style.FILL);}
 
-RectF ringTarget(){if(nav>=0)return navRect(nav);if(selected<hit.length&&hit[selected]!=null){RectF r=new RectF(hit[selected]);float s=0.05f*ease((System.currentTimeMillis()-ringT0)/170f);r.inset(-r.width()*s/2,-r.height()*s/2);return r;}return new RectF(ringTo);}
-RectF ringCurrent(long t){float q=ease((t-ringT0)/170f);return new RectF(ringFrom.left+(ringTo.left-ringFrom.left)*q,ringFrom.top+(ringTo.top-ringFrom.top)*q,ringFrom.right+(ringTo.right-ringFrom.right)*q,ringFrom.bottom+(ringTo.bottom-ringFrom.bottom)*q);}
 
 // App card, built only from the installed app's own banner or icon: glossy tile (Aurora), scenic poster (Cinema Shelf) or frosted glass.
 void card(Canvas c,App a,RectF r){int t=a.tone();c.save();Path clip=new Path();clip.addRoundRect(r,18,18,Path.Direction.CW);c.clipPath(clip);p.setStyle(Paint.Style.FILL);

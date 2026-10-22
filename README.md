@@ -7,7 +7,7 @@ TV's settings. No ads, no rows of recommendations.
 - **Five themes:** Lunar, Aurora, Cinema Shelf, Prism and Nebula, each with its own wallpaper and
   card style: frosted glass, glossy tiles or scenic posters.
 - **Cards made from your apps:** each card uses the app's own TV banner or icon, tinted to match.
-- **Built for the remote:** smooth focus animation, Hold OK to rearrange, Luma-styled menus.
+- **Built for the remote:** a crisp highlight that moves straight to the tile you press, Hold OK to rearrange, Luma-styled menus.
 - **Settings in one place:** the gear opens Luma Settings (Appearance, TV settings, About).
 - **Screen-reader friendly:** every tile, menu row and top-bar item is labelled.
 - **Small and private:** no internet access, no permissions, no tracking. About 11 MB.
