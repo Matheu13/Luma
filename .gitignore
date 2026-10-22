@@ -1,0 +1,13 @@
+# Build output
+build/
+
+# Personal files kept out of the public repo: design mockups, audit history, old scripts, signing key
+private/
+tools/local.json
+
+# Signing keys
+*.keystore
+*.jks
+
+*.apk
+*.idsig

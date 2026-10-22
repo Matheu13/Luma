@@ -1,0 +1,24 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.dhyn.luma" android:versionCode="12" android:versionName="1.1">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="28"/>
+    <uses-feature android:name="android.software.leanback" android:required="false"/>
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+    <application android:label="Luma" android:icon="@mipmap/luma_launcher" android:banner="@drawable/luma_banner" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false">
+        <activity android:name="com.dhyn.tvhome.MainActivity" android:label="Luma" android:launchMode="singleTask" android:screenOrientation="landscape" android:exported="true"/>
+        <!-- App-list entry on Fire TV, Android TV and Google TV. -->
+        <activity-alias android:name="com.dhyn.tvhome.LumaLauncher" android:targetActivity="com.dhyn.tvhome.MainActivity" android:exported="true" android:label="Luma">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <!-- Home-app entry, off by default; MainActivity turns it on when not running on Fire TV. -->
+        <activity-alias android:name="com.dhyn.tvhome.LumaHome" android:targetActivity="com.dhyn.tvhome.MainActivity" android:enabled="false" android:exported="true" android:label="Luma">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.HOME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity-alias>
+    </application>
+</manifest>
