@@ -75,7 +75,7 @@ The five existing themes stay exactly as they are. No Apple artwork, names or ic
   - press Up back to row 1;
   - open a lower-row app with OK;
   - Hold OK on a lower row shows "Add to dock";
-  - end on the theme the audit started with.
+  - Daylight runs just before Nebula, so the audit still ends on Nebula as it does today.
 - Manual check on the dev Fire TV: animation smoothness, and readability from the sofa.
 
 ## Out of scope
