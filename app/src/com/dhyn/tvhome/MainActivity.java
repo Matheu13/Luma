@@ -20,7 +20,8 @@ class App {String name,pkg;Drawable icon,banner;int tone;Bitmap shelf,disc;App(S
 // background layer, its logo at the size Android intends. A flat icon has its plain margin trimmed: the disc takes the
 // margin's colour (the app's own colour when the margin is transparent) and the logo sits centred at 60% of the disc.
 Bitmap disc(){if(disc!=null&&!disc.isRecycled())return disc;disc=Bitmap.createBitmap(200,200,Bitmap.Config.ARGB_8888);Canvas k=new Canvas(disc);if(icon==null)return disc;
-if(icon instanceof android.graphics.drawable.AdaptiveIconDrawable){android.graphics.drawable.AdaptiveIconDrawable ai=(android.graphics.drawable.AdaptiveIconDrawable)icon;for(Drawable l:new Drawable[]{ai.getBackground(),ai.getForeground()})if(l!=null){l.setBounds(-50,-50,250,250);l.draw(k);}return disc;}
+if(icon instanceof android.graphics.drawable.AdaptiveIconDrawable){android.graphics.drawable.AdaptiveIconDrawable ai=(android.graphics.drawable.AdaptiveIconDrawable)icon;// The layers belong to the icon drawn elsewhere too (All apps), so their bounds are put back afterwards.
+for(Drawable l:new Drawable[]{ai.getBackground(),ai.getForeground()})if(l!=null){Rect keep=l.copyBounds();l.setBounds(-50,-50,250,250);l.draw(k);l.setBounds(keep);}return disc;}
 Bitmap b=Bitmap.createBitmap(96,96,Bitmap.Config.ARGB_8888);icon.setBounds(0,0,96,96);icon.draw(new Canvas(b));int edge=b.getPixel(2,2);boolean clear=Color.alpha(edge)<128;int l=96,t=96,r=-1,bt=-1;
 for(int y=0;y<96;y++)for(int x=0;x<96;x++){int px=b.getPixel(x,y);boolean ink=clear?Color.alpha(px)>=128:Math.abs(Color.red(px)-Color.red(edge))+Math.abs(Color.green(px)-Color.green(edge))+Math.abs(Color.blue(px)-Color.blue(edge))>60;if(ink){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);bt=Math.max(bt,y);}}
 k.drawColor(clear?(tone()|0xff000000):(edge|0xff000000));if(r>=l){float w=r-l+1,h=bt-t+1,z=120/Math.max(w,h);Paint q=new Paint(Paint.FILTER_BITMAP_FLAG|Paint.ANTI_ALIAS_FLAG);k.drawBitmap(b,new Rect(l,t,r+1,bt+1),new RectF(100-w*z/2,100-h*z/2,100+w*z/2,100+h*z/2),q);}
@@ -90,7 +91,7 @@ ArrayList<String> items=new ArrayList<>();items.add("Move app");items.add(append
 Panel q=new Panel(a.name,items.toArray(new String[0]),null);
 show(q,w->{if(w==2&&remove){favourites.remove(a);selected=Math.max(0,Math.min(selected,visible().size()-1));saveOrder();screen.invalidate();return;}
 if(w==1&&append){favourites.add(a);saveOrder();screen.invalidate();return;}
-if(w==0){moving=true;hintUntil=Long.MAX_VALUE;}else if(w==1&&dock)chooseFavourite(selected,q);else if(w==1){String[] slots=new String[favourites.size()];for(int j=0;j<slots.length;j++)slots[j]="Slot "+(j+1)+": "+favourites.get(j).name;show(new Panel("Add "+a.name+" to dock",slots,q),slot->putInDock(slot,a));}screen.invalidate();});}
+if(w==0){moving=true;hintUntil=Long.MAX_VALUE;}else if(w==1&&dock)chooseFavourite(selected,q);else if(w==1){String[] slots=new String[grows?favourites.size():dock7().size()];for(int j=0;j<slots.length;j++)slots[j]="Slot "+(j+1)+": "+favourites.get(j).name;show(new Panel("Add "+a.name+" to dock",slots,q),slot->putInDock(slot,a));}screen.invalidate();});}
 @Override public boolean onKeyUp(int k,KeyEvent e){if(k==23||k==66){if(panel==null&&nav<0&&!held&&!moving)launch(selected);held=false;return true;}return super.onKeyUp(k,e);}
 
 void menu(){Panel q=new Panel("Luma",new String[]{"Home","All apps","Settings","Arrange selected app"},null);show(q,w->{if(w==2)settingsPanel(q);else if(w==3)appOptions();else{all=w==1;selected=0;nav=-1;}});}

@@ -159,7 +159,7 @@ def long_row_checks(before):
             name = re.sub(r', app.*', '', selected())
             if name and name not in before: break
             key(22, 0.7)
-        key(23, 1.2, long=True); ok = option('Add to home'); added = name if ok else None
+        key(23, 1.2, long=True); added = name; ok = option('Add to home')
         key(4, 1.0); root()
         for _ in range(10): key(22, 0.6)
         last = selected(); shot('aurora-row-end'); root(); shot('aurora-row-start')
@@ -168,8 +168,13 @@ def long_row_checks(before):
         record('Aurora row slides to the last app and stops there', 'dock 8 of 8' in last and d > 8, f'row difference {d:.1f}')
         choose_theme('Lunar'); root(); shown = dock()
         record('Fixed themes still show seven', shown == before, ' / '.join(shown))
+        # Choosing a dock slot from All apps in a seven-tile theme lists only the seven visible slots.
+        key(19); key(22); key(23, 1.5); key(23, 1.2, long=True); option('Add to dock'); slots = [t for t in texts() if t.startswith('Slot ')]
+        key(4); key(4); key(4)
+        record('Fixed themes offer only seven dock slots', len(slots) == 7, f'{len(slots)} slots offered')
         choose_theme('Aurora')
     finally:
+        root(); choose_theme('Aurora')
         if added:
             root()
             for _ in range(10): key(22, 0.6)
@@ -177,7 +182,8 @@ def long_row_checks(before):
         root()
         for _ in range(10): key(22, 0.6)
         last = selected()
-        record('Aurora remove restores the home row', 'dock 7 of 7' in last and dock()[:1] != [], last)
+        root(); restored = dock()
+        record('Aurora remove restores the home row', 'dock 7 of 7' in last and restored == before, ' / '.join(restored))
 
 def daylight_checks():
     # Daylight shows every app: the dock in row 1, the rest below. Starts and ends on row 1 of a fresh Luma.
