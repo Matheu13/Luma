@@ -10,16 +10,18 @@ TV's settings. No ads, no rows of recommendations.
 |---|---|
 | ![Aurora theme: glossy tinted tiles under "Your night starts here."](docs/screenshots/aurora.jpg) | ![Cinema Shelf theme: tall scenic poster cards over a misty lake](docs/screenshots/cinema-shelf.jpg) |
 | **Prism** | **Nebula** |
-| ![Prism theme: frosted glass tiles over glass ribbons](docs/screenshots/prism.jpg) | ![Nebula theme: a large preview of the selected app beside a grid of apps](docs/screenshots/nebula.jpg) |
+| ![Prism theme: round app icons with their names under glass ribbons, the selected one larger with a white ring and glow](docs/screenshots/prism.jpg) | ![Nebula theme: a large preview of the selected app beside a grid of apps](docs/screenshots/nebula.jpg) |
 | **Daylight** | |
 | ![Daylight theme: a light home with a big preview of the selected favourite above rows of every app](docs/screenshots/daylight.jpg) | |
 
 *Screenshots from a Fire TV. The apps shown are the ones installed on that TV; their names and artwork belong to their owners.*
 
 - **Six themes:** Lunar, Aurora, Cinema Shelf, Prism and Nebula, each with its own wallpaper and
-  card style (frosted glass, glossy tiles or scenic posters), and Daylight, a light home in the style of a
+  card style (frosted glass, glossy tiles, scenic posters or round icons), and Daylight, a light home in the style of a
   streaming box: a big preview of the focused favourite, all your apps in rows, and a gentle lift on the selected tile.
 - **Cards made from your apps:** each card uses the app's own TV banner or icon, tinted to match.
+- **As many home apps as you like:** in Aurora and Cinema Shelf the home row takes any number of apps and slides along as you
+  move; add them from All apps (Hold OK > Add to home). The other themes show the first seven.
 - **Built for the remote:** a crisp highlight that moves straight to the tile you press, Hold OK to rearrange, Luma-styled menus.
 - **Settings in one place:** the gear opens Luma Settings (Appearance, TV settings, About).
 - **Screen-reader friendly:** every tile, menu row and top-bar item is labelled.

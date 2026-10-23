@@ -43,7 +43,7 @@ already disabled before Luma; a unit-test framework.
 | `MainActivity.java` | Settings gets a "TV setup" panel; update hint on resume; crash guard. ADB work runs on a background thread, with results posted to the UI. | TvControl |
 
 Manifest: add `android.permission.INTERNET` (required for a localhost socket), the `LumaDream` service
-(`BIND_DREAM_SERVICE`), and `HomeKey` (`BIND_ACCESSIBILITY_SERVICE`, only if built). Version 1.3, versionCode 15.
+(`BIND_DREAM_SERVICE`), and `HomeKey` (`BIND_ACCESSIBILITY_SERVICE`, only if built). Version 1.3, versionCode 16.
 
 ## User flow (Settings → TV setup, Luma panel style)
 1. **Developer access.** Shows one-off steps for the platform (Fire TV: Settings → My Fire TV → Developer options → ADB
