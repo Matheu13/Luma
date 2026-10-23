@@ -15,7 +15,16 @@ static final int DOCK=7;
 
 int theme=0;Screen screen;ArrayList<App> apps=new ArrayList<>(),favourites=new ArrayList<>();boolean all=false,moving=false,held=false,fireTv;int selected=0,nav=-1;Panel panel;long hintUntil;
 
-class App {String name,pkg;Drawable icon,banner;int tone;Bitmap shelf;App(String n,String p,Drawable d,Drawable b){name=n;pkg=p;icon=d;banner=b;}
+class App {String name,pkg;Drawable icon,banner;int tone;Bitmap shelf,disc;App(String n,String p,Drawable d,Drawable b){name=n;pkg=p;icon=d;banner=b;}
+// Prism's round icon, built once at 200x200 (drawn inside a circle). A two-layer (adaptive) icon fills the disc with its
+// background layer, its logo at the size Android intends. A flat icon has its plain margin trimmed: the disc takes the
+// margin's colour (the app's own colour when the margin is transparent) and the logo sits centred at 60% of the disc.
+Bitmap disc(){if(disc!=null&&!disc.isRecycled())return disc;disc=Bitmap.createBitmap(200,200,Bitmap.Config.ARGB_8888);Canvas k=new Canvas(disc);if(icon==null)return disc;
+if(icon instanceof android.graphics.drawable.AdaptiveIconDrawable){android.graphics.drawable.AdaptiveIconDrawable ai=(android.graphics.drawable.AdaptiveIconDrawable)icon;for(Drawable l:new Drawable[]{ai.getBackground(),ai.getForeground()})if(l!=null){l.setBounds(-50,-50,250,250);l.draw(k);}return disc;}
+Bitmap b=Bitmap.createBitmap(96,96,Bitmap.Config.ARGB_8888);icon.setBounds(0,0,96,96);icon.draw(new Canvas(b));int edge=b.getPixel(2,2);boolean clear=Color.alpha(edge)<128;int l=96,t=96,r=-1,bt=-1;
+for(int y=0;y<96;y++)for(int x=0;x<96;x++){int px=b.getPixel(x,y);boolean ink=clear?Color.alpha(px)>=128:Math.abs(Color.red(px)-Color.red(edge))+Math.abs(Color.green(px)-Color.green(edge))+Math.abs(Color.blue(px)-Color.blue(edge))>60;if(ink){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);bt=Math.max(bt,y);}}
+k.drawColor(clear?(tone()|0xff000000):(edge|0xff000000));if(r>=l){float w=r-l+1,h=bt-t+1,z=120/Math.max(w,h);Paint q=new Paint(Paint.FILTER_BITMAP_FLAG|Paint.ANTI_ALIAS_FLAG);k.drawBitmap(b,new Rect(l,t,r+1,bt+1),new RectF(100-w*z/2,100-h*z/2,100+w*z/2,100+h*z/2),q);}
+b.recycle();return disc;}
 // Daylight's top-area backdrop, built once per app at half size: a deep wash of the app's colour over its art squeezed
 // to 12x7 and enlarged with filtering (so only its colours survive, no shapes), dark enough for the white title, and
 // faded out below the title so it melts into the wallpaper. Baking it keeps each frame to a single bitmap draw.
@@ -38,7 +47,7 @@ App makeApp(String pkg){PackageManager pm=getPackageManager();Intent in=appInten
 void refreshApps(){String focus=visible().size()>selected?visible().get(selected).pkg:null;ArrayList<App> found=new ArrayList<>();Set<String> seen=new HashSet<>();seen.add(getPackageName());PackageManager pm=getPackageManager();
 for(String pkg:DEFAULTS){App a=seen.add(pkg)?makeApp(pkg):null;if(a!=null)found.add(a);}
 for(String category:new String[]{Intent.CATEGORY_LEANBACK_LAUNCHER,Intent.CATEGORY_LAUNCHER})for(ResolveInfo r:pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(category),0)){String pkg=r.activityInfo.packageName;if(!seen.add(pkg))continue;App a=makeApp(pkg);if(a!=null)found.add(a);}
-for(App a:apps)if(a.shelf!=null)a.shelf.recycle();apps=found;restoreOrder();selected=0;for(int j=0;focus!=null&&j<visible().size();j++)if(visible().get(j).pkg.equals(focus))selected=j;if(screen!=null)screen.invalidate();}
+for(App a:apps){if(a.shelf!=null)a.shelf.recycle();if(a.disc!=null)a.disc.recycle();}apps=found;restoreOrder();selected=0;for(int j=0;focus!=null&&j<visible().size();j++)if(visible().get(j).pkg.equals(focus))selected=j;if(screen!=null)screen.invalidate();}
 
 // One settings file for every launch entry. Activity.getPreferences was keyed by the entry Luma was opened through, which kept two diverging copies.
 SharedPreferences prefs(){return getSharedPreferences("luma",0);}
@@ -183,9 +192,10 @@ c.restore();return sliding;}
 RectF roundCard(Canvas c,App a,RectF slot,boolean focused){int t=a.tone();float cx=slot.centerX(),cy=slot.top+95,rad=focused?100:85;
 if(focused){p.setColor(0xff000000);p.setShader(new RadialGradient(cx,cy,rad+34,new int[]{alpha(t,0xaa),alpha(t,0)},new float[]{rad/(rad+34),1},Shader.TileMode.CLAMP));c.drawCircle(cx,cy,rad+34,p);p.setShader(null);}
 c.save();Path clip=new Path();clip.addCircle(cx,cy,rad,Path.Direction.CW);c.clipPath(clip);p.setColor(0xff000000);p.setShader(new LinearGradient(0,cy-rad,0,cy+rad,shade(t,1.1f),shade(t,0.6f),Shader.TileMode.CLAMP));c.drawCircle(cx,cy,rad,p);p.setShader(null);
-if(a.icon!=null)drawArt(c,a.icon,new RectF(cx-rad,cy-rad,cx+rad,cy+rad));c.restore();
+p.setAlpha(255);c.drawBitmap(a.disc(),null,new RectF(cx-rad,cy-rad,cx+rad,cy+rad),p);c.restore();
 p.setStyle(Paint.Style.STROKE);p.setColor(focused?Color.WHITE:0x30ffffff);p.setStrokeWidth(focused?5:1.5f);c.drawCircle(cx,cy,rad,p);p.setStyle(Paint.Style.FILL);
-p.setTextAlign(Paint.Align.CENTER);text(c,label(a.name,200,22),cx,cy+125,22,Color.WHITE);p.setTextAlign(Paint.Align.LEFT);return new RectF(cx-rad,cy-rad,cx+rad,cy+rad);}
+// A soft shadow keeps the name readable over Prism's bright glass ribbons.
+p.setShadowLayer(6,0,1.5f,0xcc000000);p.setTextAlign(Paint.Align.CENTER);text(c,label(a.name,200,22),cx,cy+125,22,Color.WHITE);p.setTextAlign(Paint.Align.LEFT);p.clearShadowLayer();return new RectF(cx-rad,cy-rad,cx+rad,cy+rad);}
 // Daylight's tiles: seven to a row, 200x120, laid out in content space (before scrolling).
 RectF daylightRect(int i){int r=i/7,col=i%7;float l=52+col*(200+28),t=500+r*(120+40);return new RectF(l,t,l+200,t+120);}
 // A rounded tile tinted with the app's colour, showing its TV banner, or its icon when it has none.
