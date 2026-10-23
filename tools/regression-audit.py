@@ -121,6 +121,20 @@ def top_bar_overlap():
     return [n.get('content-desc') for n in nodes() if re.search(r'dock \d of', n.get('content-desc', ''))
             and (lambda y, yy: y < 110 and yy > 20)(*map(int, re.findall(r'\d+', n.get('bounds'))[1::2]))]
 
+def prism_shape(name):
+    # Prism's round tiles, measured on a screenshot taken with the first app focused. Design space -> screen = 1920/1672.
+    # Returns (unfocused tiles whose bounding-square corner shows bare wallpaper, focused circle's top-ring brightness).
+    from PIL import Image, ImageChops
+    k = 1920 / 1672; im = Image.open(OUT / f'{name}.png').convert('RGB')
+    wall = Image.open(ROOT / 'app' / 'assets' / 'prism-wallpaper.png').convert('RGB').resize((1920, 1081))
+    def patch(x, y): return (int((x - 3) * k), int((y - 3) * k), int((x + 3) * k), int((y + 3) * k))
+    round_ = 0
+    for col in range(1, 7):
+        cx, cy = 60 + col * 221 + 100.5, 485; box = patch(cx - 80, cy - 80)
+        d = ImageChops.difference(im.crop(box), wall.crop(box)); round_ += sum(sum(px) for px in d.getdata()) / (3 * len(d.getdata())) < 20
+    ring = sum(im.convert('L').crop(patch(160.5, 385)).getdata()) / len(im.convert('L').crop(patch(160.5, 385)).getdata())
+    return round_, ring
+
 def daylight_checks():
     # Daylight shows every app: the dock in row 1, the rest below. Starts and ends on row 1 of a fresh Luma.
     shot('theme-Daylight'); b = top_area_darkness('theme-Daylight')
@@ -204,6 +218,11 @@ def run():
         shot('theme-' + t.replace(' ', '-'))
         record(f'Theme {t} renders', ok and 'Lunar' not in texts() and 'com.dhyn.luma/' in fg(), fg() if ok else 'could not reach the theme in the Appearance panel')
         if t == 'Daylight' and ok: daylight_checks()
+        if t == 'Prism' and ok:
+            rounded, ring = prism_shape('theme-Prism')
+            record('Prism tiles are round', rounded == 6, f'{rounded} of 6 unfocused tiles show wallpaper at their corners')
+            record('Prism focus is larger with a ring', ring > 200, f'ring brightness {ring:.0f} above the focused circle')
+            total, jank = frames_while_browsing(); record('Prism stays static', total <= 24, f'{total} frames from 12 presses on Prism')
     # Back on Nebula: focus moves must stay static there (about one frame per key press plus the clock).
     total, jank = frames_while_browsing()
     record('Other themes stay static', total <= 24, f'{total} frames from 12 presses on Nebula')

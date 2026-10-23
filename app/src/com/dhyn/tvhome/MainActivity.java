@@ -133,6 +133,8 @@ int cols=all?7:(theme==4?4:7);float tileW=all?195:theme==4?225:theme==2?207:201;
 int rowOffset=all?Math.max(0,selected/7-2):0;
 for(int i=0;i<n;i++){int row=i/cols-rowOffset,col=i%cols;if(row<0||all&&row>3)continue;
 RectF r=new RectF(left+col*(tileW+gap),top+row*(tileH+22),left+col*(tileW+gap)+tileW,top+row*(tileH+22)+tileH);hit[i]=r;
+// Prism draws round tiles with their own static focus ring instead of the rectangle outline.
+if(!all&&theme==3){hit[i]=roundCard(c,visible().get(i),r,i==selected&&nav<0);continue;}
 card(c,visible().get(i),r);if(!all&&theme==1)text(c,label(visible().get(i).name,r.width()-15,23),r.left+15,r.bottom+34,23,Color.WHITE);
 // Focus: a plain outline on the selected tile, moving straight there with each key press, as in the original Luma.
 if(i==selected&&nav<0)outline(c,r,theme==1?0xff9bf6ff:Color.WHITE,4,18);}
@@ -175,6 +177,15 @@ Drawable art=a.banner!=null?a.banner:a.icon;if(art!=null){RectF box=new RectF(80
 for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){if((i==selected)!=(pass==1))continue;RectF r=daylightRect(i);RectF on=new RectF(r);on.offset(0,-scroll);hit[i]=on;if(on.bottom<-40||on.top>981)continue;float e=1-(float)Math.pow(1-lift[i],3);daylightCard(c,v.get(i),r,e,i==selected?tilt:0);}
 if(nav<0&&selected<n){RectF r=daylightRect(selected);p.setTextAlign(Paint.Align.CENTER);text(c,label(v.get(selected).name,260,22),r.centerX(),r.bottom+34,22,0xff1c1f26);p.setTextAlign(Paint.Align.LEFT);}
 c.restore();return sliding;}
+// Prism's round tile in its slot: the app's icon filling a disc on the app's colour, its name below. The focused one is
+// drawn larger, with a white ring and a soft glow in the app's colour; it is static, like every theme but Daylight.
+// Returns the circle's bounding square, used as its touch and screen-reader area.
+RectF roundCard(Canvas c,App a,RectF slot,boolean focused){int t=a.tone();float cx=slot.centerX(),cy=slot.top+95,rad=focused?100:85;
+if(focused){p.setColor(0xff000000);p.setShader(new RadialGradient(cx,cy,rad+34,new int[]{alpha(t,0xaa),alpha(t,0)},new float[]{rad/(rad+34),1},Shader.TileMode.CLAMP));c.drawCircle(cx,cy,rad+34,p);p.setShader(null);}
+c.save();Path clip=new Path();clip.addCircle(cx,cy,rad,Path.Direction.CW);c.clipPath(clip);p.setColor(0xff000000);p.setShader(new LinearGradient(0,cy-rad,0,cy+rad,shade(t,1.1f),shade(t,0.6f),Shader.TileMode.CLAMP));c.drawCircle(cx,cy,rad,p);p.setShader(null);
+if(a.icon!=null)drawArt(c,a.icon,new RectF(cx-rad,cy-rad,cx+rad,cy+rad));c.restore();
+p.setStyle(Paint.Style.STROKE);p.setColor(focused?Color.WHITE:0x30ffffff);p.setStrokeWidth(focused?5:1.5f);c.drawCircle(cx,cy,rad,p);p.setStyle(Paint.Style.FILL);
+p.setTextAlign(Paint.Align.CENTER);text(c,label(a.name,200,22),cx,cy+125,22,Color.WHITE);p.setTextAlign(Paint.Align.LEFT);return new RectF(cx-rad,cy-rad,cx+rad,cy+rad);}
 // Daylight's tiles: seven to a row, 200x120, laid out in content space (before scrolling).
 RectF daylightRect(int i){int r=i/7,col=i%7;float l=52+col*(200+28),t=500+r*(120+40);return new RectF(l,t,l+200,t+120);}
 // A rounded tile tinted with the app's colour, showing its TV banner, or its icon when it has none.
