@@ -135,6 +135,50 @@ def prism_shape(name):
     ring = sum(im.convert('L').crop(patch(160.5, 385)).getdata()) / len(im.convert('L').crop(patch(160.5, 385)).getdata())
     return round_, ring
 
+def row_diff(a, b):
+    # Mean per-pixel difference of the app-row band (screen y 420-1000) of two screenshots.
+    from PIL import Image, ImageChops
+    im = [Image.open(OUT / f'{n}.png').convert('L').crop((0, 420, 1920, 1000)) for n in (a, b)]
+    return sum(ImageChops.difference(*im).getdata()) / (1920 * 580)
+
+def option(name):
+    # Steps down an open Luma panel to the row called name and picks it. Returns False (panel closed) if it is not there.
+    if name not in texts(): key(4); return False
+    for _ in range(6):
+        if panel_selected() == name: key(23, 1.0); return True
+        key(20, 0.6)
+    key(4); return False
+
+def long_row_checks(before):
+    # Aurora's home row takes more than seven apps: add one from All apps, walk to the end, check a fixed-layout
+    # theme still shows seven, then remove it. The finally block puts the viewer's home row back whatever happens.
+    added = None
+    try:
+        root(); key(19); key(22); key(23, 1.5)                      # top bar > Apps > OK: All apps
+        for _ in range(40):
+            name = re.sub(r', app.*', '', selected())
+            if name and name not in before: break
+            key(22, 0.7)
+        key(23, 1.2, long=True); ok = option('Add to home'); added = name if ok else None
+        key(4, 1.0); root()
+        for _ in range(10): key(22, 0.6)
+        last = selected(); shot('aurora-row-end'); root(); shot('aurora-row-start')
+        record('Aurora home row takes an 8th app', ok and last.startswith(name) and 'dock 8 of 8' in last, last)
+        d = row_diff('aurora-row-start', 'aurora-row-end')
+        record('Aurora row slides to the last app and stops there', 'dock 8 of 8' in last and d > 8, f'row difference {d:.1f}')
+        choose_theme('Lunar'); root(); shown = dock()
+        record('Fixed themes still show seven', shown == before, ' / '.join(shown))
+        choose_theme('Aurora')
+    finally:
+        if added:
+            root()
+            for _ in range(10): key(22, 0.6)
+            if selected().startswith(added): key(23, 1.2, long=True); option('Remove from home')
+        root()
+        for _ in range(10): key(22, 0.6)
+        last = selected()
+        record('Aurora remove restores the home row', 'dock 7 of 7' in last and dock()[:1] != [], last)
+
 def daylight_checks():
     # Daylight shows every app: the dock in row 1, the rest below. Starts and ends on row 1 of a fresh Luma.
     shot('theme-Daylight'); b = top_area_darkness('theme-Daylight')
@@ -218,6 +262,7 @@ def run():
         shot('theme-' + t.replace(' ', '-'))
         record(f'Theme {t} renders', ok and 'Lunar' not in texts() and 'com.dhyn.luma/' in fg(), fg() if ok else 'could not reach the theme in the Appearance panel')
         if t == 'Daylight' and ok: daylight_checks()
+        if t == 'Aurora' and ok: long_row_checks(original)
         if t == 'Prism' and ok:
             rounded, ring = prism_shape('theme-Prism')
             record('Prism tiles are round', rounded == 6, f'{rounded} of 6 unfocused tiles show wallpaper at their corners')

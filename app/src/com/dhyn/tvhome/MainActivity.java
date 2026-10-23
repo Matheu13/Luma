@@ -60,26 +60,37 @@ if(!fireTv)try{getPackageManager().setComponentEnabledSetting(new ComponentName(
 theme=Math.max(0,Math.min(5,prefs().getInt("theme",0)));refreshApps();screen=new Screen();setContentView(screen);IntentFilter f=new IntentFilter();f.addAction(Intent.ACTION_PACKAGE_ADDED);f.addAction(Intent.ACTION_PACKAGE_REMOVED);f.addAction(Intent.ACTION_PACKAGE_CHANGED);f.addDataScheme("package");registerReceiver(packageObserver,f);}
 // Home pressed again while Luma is open: back to the dock.
 @Override protected void onNewIntent(Intent i){super.onNewIntent(i);if(moving){moving=false;saveOrder();}panel=null;nav=-1;all=false;hintUntil=System.currentTimeMillis()+6000;
-if(theme==DAYLIGHT){selected=Math.min(selected%7,Math.max(0,favourites.size()-1));screen.scroll=screen.scrollTarget=0;}screen.invalidate();}
+if(theme==DAYLIGHT){selected=Math.min(selected%7,Math.max(0,dock7().size()-1));screen.scroll=screen.scrollTarget=0;}screen.invalidate();}
 @Override protected void onResume(){super.onResume();refreshApps();active=true;hintUntil=System.currentTimeMillis()+6000;clockHandler.removeCallbacks(tick);clockHandler.post(tick);}
 @Override protected void onPause(){active=false;clockHandler.removeCallbacks(tick);super.onPause();}
 @Override protected void onDestroy(){clockHandler.removeCallbacks(tick);unregisterReceiver(packageObserver);super.onDestroy();}
 // Consume TV navigation before Android's focus search can swallow arrows.
 @Override public boolean dispatchKeyEvent(KeyEvent e){int k=e.getKeyCode();if(k==19||k==20||k==21||k==22||k==23||k==66||k==82||k==4){return e.getAction()==KeyEvent.ACTION_DOWN?onKeyDown(k,e):onKeyUp(k,e);}return super.dispatchKeyEvent(e);}
-ArrayList<App> visible(){if(daylight()){ArrayList<App> v=new ArrayList<>(favourites);v.addAll(rest());return v;}return all?apps:favourites;}
+// The home row is one list of any length. Aurora and Cinema Shelf show all of it in one sliding row; the themes with a
+// fixed layout show its first seven (in Daylight the rest join the rows below).
+ArrayList<App> visible(){if(daylight()){ArrayList<App> v=dock7();v.addAll(rest());return v;}if(all||longRow())return all?apps:favourites;return dock7();}
 boolean daylight(){return theme==DAYLIGHT&&!all;}
-ArrayList<App> rest(){ArrayList<App> r=new ArrayList<>();for(App a:apps)if(!favourites.contains(a))r.add(a);return r;}
-boolean inDock(int i){return !all&&(theme!=DAYLIGHT||i<favourites.size());}
+boolean longRow(){return !all&&(theme==1||theme==2);}
+ArrayList<App> dock7(){return new ArrayList<>(favourites.subList(0,Math.min(DOCK,favourites.size())));}
+ArrayList<App> rest(){ArrayList<App> d=dock7(),r=new ArrayList<>();for(App a:apps)if(!d.contains(a))r.add(a);return r;}
+boolean inDock(int i){return !all&&(theme!=DAYLIGHT||i<dock7().size());}
 // Swaps two visible apps in the list they belong to; in Daylight an app cannot cross between the dock row and the rest.
-boolean swapVisible(int a,int b){if(!daylight()){Collections.swap(visible(),a,b);return true;}int f=favourites.size();if((a<f)!=(b<f))return false;if(a<f){Collections.swap(favourites,a,b);return true;}ArrayList<App> v=visible();Collections.swap(apps,apps.indexOf(v.get(a)),apps.indexOf(v.get(b)));return true;}
+boolean swapVisible(int a,int b){if(!daylight()){Collections.swap(all?apps:favourites,a,b);return true;}int f=dock7().size();if((a<f)!=(b<f))return false;if(a<f){Collections.swap(favourites,a,b);return true;}ArrayList<App> v=visible();Collections.swap(apps,apps.indexOf(v.get(a)),apps.indexOf(v.get(b)));return true;}
 void saveOrder(){StringBuilder b=new StringBuilder();for(App a:apps){if(b.length()>0)b.append("|");b.append(a.pkg);}StringBuilder dock=new StringBuilder();for(App a:favourites){if(dock.length()>0)dock.append("|");dock.append(a.pkg);}prefs().edit().putString("appOrder",b.toString()).putString("dockOrder",dock.toString()).apply();}
 
-void restoreOrder(){String saved=prefs().getString("appOrder","");ArrayList<App> ordered=new ArrayList<>();for(String pkg:saved.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!ordered.contains(a))ordered.add(a);}for(App a:apps)if(!ordered.contains(a))ordered.add(a);apps=ordered;String dock=prefs().getString("dockOrder",saved);favourites=new ArrayList<>();for(String pkg:dock.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!favourites.contains(a)&&favourites.size()<DOCK)favourites.add(a);}for(App a:apps)if(favourites.size()<DOCK&&!favourites.contains(a))favourites.add(a);}
+void restoreOrder(){String saved=prefs().getString("appOrder","");ArrayList<App> ordered=new ArrayList<>();for(String pkg:saved.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!ordered.contains(a))ordered.add(a);}for(App a:apps)if(!ordered.contains(a))ordered.add(a);apps=ordered;String dock=prefs().getString("dockOrder",saved);favourites=new ArrayList<>();for(String pkg:dock.split("\\|")){for(App a:apps)if(a.pkg.equals(pkg)&&!favourites.contains(a))favourites.add(a);}for(App a:apps)if(favourites.size()<DOCK&&!favourites.contains(a))favourites.add(a);}
 
 void putInDock(int slot,App chosen){int existing=favourites.indexOf(chosen);if(existing>=0)Collections.swap(favourites,slot,existing);else favourites.set(slot,chosen);saveOrder();}
 void chooseFavourite(int slot,Panel from){String[] labels=new String[apps.size()];for(int j=0;j<apps.size();j++)labels[j]=apps.get(j).name;Panel q=new Panel("Dock slot "+(slot+1),labels,from);q.sel=Math.max(0,apps.indexOf(favourites.get(slot)));show(q,w->{putInDock(slot,apps.get(w));selected=slot;});}
-void appOptions(){if(visible().isEmpty())return;App a=visible().get(selected);boolean dock=inDock(selected);Panel q=new Panel(a.name,new String[]{"Move app",dock?"Choose app for this slot":"Add to dock","Cancel"},null);
-show(q,w->{if(w==0){moving=true;hintUntil=Long.MAX_VALUE;}else if(w==1&&dock)chooseFavourite(selected,q);else if(w==1){String[] slots=new String[favourites.size()];for(int j=0;j<slots.length;j++)slots[j]="Slot "+(j+1)+": "+favourites.get(j).name;show(new Panel("Add "+a.name+" to dock",slots,q),slot->putInDock(slot,a));}screen.invalidate();});}
+// In Aurora and Cinema Shelf the home row grows: All apps offers "Add to home" (to the end of the row) and, once the row has
+// more than seven apps, Hold OK on it offers "Remove from home". The other themes keep choosing a slot among seven.
+void appOptions(){if(visible().isEmpty())return;App a=visible().get(selected);boolean dock=inDock(selected),grows=theme==1||theme==2,onHome=favourites.contains(a);
+boolean append=all&&grows&&!onHome,remove=grows&&onHome&&favourites.size()>DOCK;
+ArrayList<String> items=new ArrayList<>();items.add("Move app");items.add(append?"Add to home":dock?"Choose app for this slot":"Add to dock");if(remove)items.add("Remove from home");items.add("Cancel");
+Panel q=new Panel(a.name,items.toArray(new String[0]),null);
+show(q,w->{if(w==2&&remove){favourites.remove(a);selected=Math.max(0,Math.min(selected,visible().size()-1));saveOrder();screen.invalidate();return;}
+if(w==1&&append){favourites.add(a);saveOrder();screen.invalidate();return;}
+if(w==0){moving=true;hintUntil=Long.MAX_VALUE;}else if(w==1&&dock)chooseFavourite(selected,q);else if(w==1){String[] slots=new String[favourites.size()];for(int j=0;j<slots.length;j++)slots[j]="Slot "+(j+1)+": "+favourites.get(j).name;show(new Panel("Add "+a.name+" to dock",slots,q),slot->putInDock(slot,a));}screen.invalidate();});}
 @Override public boolean onKeyUp(int k,KeyEvent e){if(k==23||k==66){if(panel==null&&nav<0&&!held&&!moving)launch(selected);held=false;return true;}return super.onKeyUp(k,e);}
 
 void menu(){Panel q=new Panel("Luma",new String[]{"Home","All apps","Settings","Arrange selected app"},null);show(q,w->{if(w==2)settingsPanel(q);else if(w==3)appOptions();else{all=w==1;selected=0;nav=-1;}});}
@@ -98,10 +109,11 @@ if(k==19)q.sel=(q.sel+m-1)%m;else if(k==20)q.sel=(q.sel+1)%m;else if(k==23||k==6
 
 public boolean onKeyDown(int k,KeyEvent e){if(panel!=null)return panelKey(k,e);if(k==82){nav=-1;menu();return true;}if(apps.isEmpty())return true;int n=visible().size();
 if((k==23||k==66)&&nav<0){if(moving){moving=false;hintUntil=0;saveOrder();held=true;screen.invalidate();return true;}if(e.getRepeatCount()>0&&!held){held=true;appOptions();}return true;}
-if(moving){int old=selected,step=all?7:theme==4?4:7;if(k==21)selected=Math.max(0,selected-1);else if(k==22)selected=Math.min(n-1,selected+1);else if(k==19)selected=Math.max(0,selected-step);else if(k==20)selected=Math.min(n-1,selected+step);else if(k==4){moving=false;hintUntil=0;saveOrder();}if(!swapVisible(old,selected))selected=old;screen.invalidate();return true;}
+if(moving){int old=selected,step=all?7:theme==4?4:longRow()?0:7;if(k==21)selected=Math.max(0,selected-1);else if(k==22)selected=Math.min(n-1,selected+1);else if(k==19)selected=Math.max(0,selected-step);else if(k==20)selected=Math.min(n-1,selected+step);else if(k==4){moving=false;hintUntil=0;saveOrder();}if(!swapVisible(old,selected))selected=old;screen.invalidate();return true;}
 int cols=all?7:(theme==4?4:7);
 if(daylight()&&k>=19&&k<=22){screen.tiltX=k==21?-1:k==22?1:0;screen.tiltY=k==19?-1:k==20?1:0;screen.tiltAt=System.currentTimeMillis();}
 if(nav>=0){if(k==21)nav=(nav+2)%3;else if(k==22)nav=(nav+1)%3;else if(k==20||k==4)nav=-1;else if(k==23||k==66){held=true;if(nav==2)settingsPanel(null);else{all=nav==1;selected=0;nav=-1;}}screen.invalidate();return true;}
+if(longRow()&&k>=19&&k<=22){if(k==19)nav=0;else if(k==21)selected=Math.max(0,selected-1);else if(k==22)selected=Math.min(n-1,selected+1);screen.invalidate();return true;}
 if(k==19&&selected<cols){nav=all?1:0;screen.invalidate();return true;}
 // Back at the top level does nothing: a launcher has nowhere to go back to, and finishing would flash Amazon's home.
 if(k==4){if(all){all=false;selected=0;screen.invalidate();}return true;}
@@ -124,7 +136,9 @@ void outline(Canvas c,RectF r,int color,float width,float rad){p.setShader(null)
 int shade(int c,float f){return Color.rgb(Math.min(255,(int)(Color.red(c)*f)),Math.min(255,(int)(Color.green(c)*f)),Math.min(255,(int)(Color.blue(c)*f)));}
 int alpha(int c,int a){return (c&0xffffff)|(a<<24);}
 // Draws a region of a full-screen bitmap (wallpaper or its frosted copy) into r, matching the wallpaper underneath.
-void slice(Canvas c,Bitmap b,RectF src,RectF r){if(b==null)return;float sx=b.getWidth()/1672f,sy=b.getHeight()/941f;c.drawBitmap(b,new Rect((int)(src.left*sx),(int)(src.top*sy),(int)(src.right*sx),(int)(src.bottom*sy)),r,p);}
+void slice(Canvas c,Bitmap b,RectF src,RectF r){if(b==null)return;float sx=b.getWidth()/1672f,sy=b.getHeight()/941f;
+// A tile partly off screen (the sliding row's edges) takes only the part of the picture that exists, mapped 1:1.
+if(src.left<0||src.right>1672){float cut0=Math.max(0,-src.left),cut1=Math.max(0,src.right-1672),k=r.width()/src.width();src=new RectF(src.left+cut0,src.top,src.right-cut1,src.bottom);r=new RectF(r.left+cut0*k,r.top,r.right-cut1*k,r.bottom);if(src.width()<=0)return;}c.drawBitmap(b,new Rect((int)(src.left*sx),(int)(src.top*sy),(int)(src.right*sx),(int)(src.bottom*sy)),r,p);}
 
 protected void onDraw(Canvas real){super.onDraw(real);long now=System.currentTimeMillis();boolean animating=false;scale=Math.min(getWidth()/1672f,getHeight()/941f);real.save();real.translate((getWidth()-1672*scale)/2,(getHeight()-941*scale)/2);real.scale(scale,scale);Canvas c=real;
 c.drawColor(Color.rgb(5,8,15));p.setShader(null);p.setAlpha(255);if(bg!=null)c.drawBitmap(bg,null,new RectF(0,0,1672,941),p);if(all){p.setColor(0xcc060914);c.drawRect(0,0,1672,941,p);}
@@ -140,8 +154,13 @@ int n=visible().size();if(dl)n=0;else hit=new RectF[n];
 int cols=all?7:(theme==4?4:7);float tileW=all?195:theme==4?225:theme==2?207:201;float tileH=all?145:theme==4?210:theme==2?420:theme==0?162:theme==1?195:210;float left=all?60:theme==4?620:60;float top=all?200:theme==4?305:theme==2?365:theme==0?660:390;float gap=all?25:theme==4?18:20;
 // All apps shows four rows, keeping the selected row third from the top.
 int rowOffset=all?Math.max(0,selected/7-2):0;
-for(int i=0;i<n;i++){int row=i/cols-rowOffset,col=i%cols;if(row<0||all&&row>3)continue;
-RectF r=new RectF(left+col*(tileW+gap),top+row*(tileH+22),left+col*(tileW+gap)+tileW,top+row*(tileH+22)+tileH);hit[i]=r;
+// Aurora and Cinema Shelf: one row of any length that glides sideways (about 200 ms) to keep the selected app in view,
+// with the next app peeking in at the edge. The highlight itself still jumps straight to the app.
+boolean slide=longRow();float rowX=0;if(slide){float step=tileW+gap,x0=selected*step,span=1672-left-40,end=Math.max(0,n*step-gap-span);
+if(x0-rowTarget<0)rowTarget=x0;if(x0+tileW-rowTarget>span)rowTarget=x0+tileW-span;rowTarget=Math.max(0,Math.min(end,rowTarget));
+float dt=Math.max(0,Math.min(50,now-rowFrame));rowFrame=now;rowScroll+=(rowTarget-rowScroll)*(float)(1-Math.exp(-dt/66.0));if(Math.abs(rowTarget-rowScroll)>0.5f)animating=true;else rowScroll=rowTarget;rowX=-rowScroll;}else rowScroll=rowTarget=0;
+for(int i=0;i<n;i++){int row=slide?0:i/cols-rowOffset,col=slide?i:i%cols;if(row<0||all&&row>3)continue;
+RectF r=new RectF(left+col*(tileW+gap)+rowX,top+row*(tileH+22),left+col*(tileW+gap)+tileW+rowX,top+row*(tileH+22)+tileH);if(slide&&(r.right<0||r.left>1672))continue;hit[i]=r;
 // Prism draws round tiles with their own static focus ring instead of the rectangle outline.
 if(!all&&theme==3){hit[i]=roundCard(c,visible().get(i),r,i==selected&&nav<0);continue;}
 card(c,visible().get(i),r);if(!all&&theme==1)text(c,label(visible().get(i).name,r.width()-15,23),r.left+15,r.bottom+34,23,Color.WHITE);
@@ -170,10 +189,10 @@ if(art!=null){RectF box=a.banner!=null?new RectF(r.left+16,cy-s*0.62f,r.right-16
 if(all||theme!=1){float size=all?19:theme==2?30:theme==4?24:theme==3?22:20;p.setTypeface(Typeface.create("sans-serif-light",0));p.setTextSize(size);while(size>16&&p.measureText(a.name)>r.width()-24)p.setTextSize(--size);p.setTextAlign(Paint.Align.CENTER);text(c,label(a.name,r.width()-24,size),r.centerX(),r.bottom-(all?16:theme==2?44:theme==0?16:20),size,theme==0&&!all?0xffd8dbe0:Color.WHITE);p.setTextAlign(Paint.Align.LEFT);}}
 
 // Daylight home: a big top area for the focused favourite, then every app in rows, all scrolled as one page. Returns true while still moving.
-float scroll,scrollTarget;long lastFrame,tiltAt;int shelfIndex,tiltX,tiltY;float[] lift;Camera camera=new Camera();Matrix tiltMatrix=new Matrix();
+float scroll,scrollTarget,rowScroll,rowTarget;long lastFrame,tiltAt,rowFrame;int shelfIndex,tiltX,tiltY;float[] lift;Camera camera=new Camera();Matrix tiltMatrix=new Matrix();
 // The lifted tile's soft shadow; blurred shadows draw with hardware acceleration from Android 9, older TVs simply go without.
 Paint shadow=new Paint(Paint.ANTI_ALIAS_FLAG);{shadow.setMaskFilter(new BlurMaskFilter(22,BlurMaskFilter.Blur.NORMAL));}
-boolean daylightHome(Canvas c,long now){ArrayList<App> v=visible();int n=v.size(),f=favourites.size(),row=selected/7;hit=new RectF[n];
+boolean daylightHome(Canvas c,long now){ArrayList<App> v=visible();int n=v.size(),f=dock7().size(),row=selected/7;hit=new RectF[n];
 float dt=Math.max(0,Math.min(50,now-lastFrame));lastFrame=now;scrollTarget=row==0?0:200+160*row;scroll+=(scrollTarget-scroll)*(float)(1-Math.exp(-dt/66.0));boolean sliding=Math.abs(scrollTarget-scroll)>0.5f;if(!sliding)scroll=scrollTarget;
 // Focus lift per tile, 0..1, eased over 150 ms; the list can change size when apps are installed or removed.
 if(lift==null||lift.length!=n){lift=new float[n];if(selected<n&&nav<0)lift[selected]=1;}
@@ -218,7 +237,7 @@ if(q.top>0)text(c,"▲",x+w-46,y+62,18,dim);if(q.top+rows<q.items.length)text(c,
 
 // Screen-reader support: tiles, top-bar items and panel rows are virtual nodes with names and actions.
 String[] navNames={"Home tab","Apps tab","Settings"};String lastSaid="";
-String speak(int i){ArrayList<App> v=visible();App a=v.get(i);int f=favourites.size();String where=daylight()?(i<f?"dock "+(i+1)+" of "+f:"app "+(i-f+1)+" of "+(v.size()-f)):(all?"app ":"dock ")+(i+1)+" of "+v.size();return (moving?"Moving ":"")+a.name+", "+where+(moving?". Arrows move, OK saves":"");}
+String speak(int i){ArrayList<App> v=visible();App a=v.get(i);int f=dock7().size();String where=daylight()?(i<f?"dock "+(i+1)+" of "+f:"app "+(i-f+1)+" of "+(v.size()-f)):(all?"app ":"dock ")+(i+1)+" of "+v.size();return (moving?"Moving ":"")+a.name+", "+where+(moving?". Arrows move, OK saves":"");}
 RectF navRect(int k){return k==0?new RectF(50,30,150,90):k==1?new RectF(170,30,275,90):new RectF(1408,26,1472,90);}
 Rect toScreen(RectF r){int[] o=new int[2];getLocationOnScreen(o);float ox=o[0]+(getWidth()-1672*scale)/2,oy=o[1]+(getHeight()-941*scale)/2;return new Rect((int)(ox+r.left*scale),(int)(oy+r.top*scale),(int)(ox+r.right*scale),(int)(oy+r.bottom*scale));}
 void announce(){String said=panel!=null?panel.title+": "+panel.items[panel.sel]:nav>=0?navNames[nav]:visible().isEmpty()?"No apps":speak(Math.min(selected,visible().size()-1));if(said.equals(lastSaid))return;lastSaid=said;AccessibilityManager am=(AccessibilityManager)getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);if(am!=null&&am.isEnabled())post(()->announceForAccessibility(said));}
